@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+
+.text-glow { text-shadow: 0 0 18px rgba(0, 230, 210, 0.35); }
+.bg-glass { backdrop-filter: blur(16px); background-color: rgba(21,29,46,0.65); }
+
+:root { color-scheme: dark; }
+html, body, #root { height: 100%; }
+
+body {
+  background-color: #0E1625;
+  color: #F4F4F4;
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Inter", Arial, sans-serif;
+}
+/* Subtle panel surface */
+.panel {
+  background: linear-gradient(180deg, #121827 0%, #0F1626 100%); /* theme.panel/panel2 */
+  border: 1px solid rgba(148, 163, 184, 0.18); /* theme.border */
+  border-radius: 16px;
+}
+
+/* Soft cyan/blue edge glow (muted) */
+.shadow-glow-soft {
+  box-shadow:
+    0 0 0 1px rgba(148, 163, 184, 0.18),
+    0 10px 24px rgba(13, 18, 30, 0.65),
+    0 0 28px rgba(103, 232, 249, 0.12);
+}
+
+/* Thin ring on focus/hover (not neon) */
+.ring-soft {
+  box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.22);
+}
+
+/* Text helpers */
+.text-title { color: #E5E7EB; }   /* theme.text */
+.text-sub   { color: #A7B2C3; }   /* theme.sub  */
+.text-mute  { color: #7A8799; }   /* theme.mute */
