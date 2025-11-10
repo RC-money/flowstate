@@ -1,68 +1,125 @@
-import { motion } from "motion/react";
-import { theme } from "../theme";
+import { motion, AnimatePresence } from "motion/react";
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   notes: string[];
+  status?: "todo" | "inprogress" | "done";
   onComplete: () => void;
+  onMove?: (newStatus: "todo" | "inprogress" | "done") => void;
 }
 
-export function TaskModal({ isOpen, onClose, title, notes, onComplete }: TaskModalProps) {
+export function TaskModal({
+  isOpen,
+  onClose,
+  title,
+  notes,
+  status = "todo",
+  onComplete,
+  onMove,
+}: TaskModalProps) {
   if (!isOpen) return null;
 
+  const renderButtons = () => {
+    switch (status) {
+      case "todo":
+        return (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onMove?.("inprogress")}
+            className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 transition text-white font-medium"
+          >
+            Move to In Progress
+          </motion.button>
+        );
+
+      case "inprogress":
+        return (
+          <>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onComplete}
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition text-white font-medium"
+            >
+              Mark Complete
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => onMove?.("todo")}
+              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-white font-medium"
+            >
+              Move to To-Do
+            </motion.button>
+          </>
+        );
+
+      case "done":
+        return (
+          <>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => onMove?.("inprogress")}
+              className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 transition text-white font-medium"
+            >
+              Move to In Progress
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => onMove?.("todo")}
+              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-white font-medium"
+            >
+              Move to To-Do
+            </motion.button>
+          </>
+        );
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <motion.div
-        initial={{ opacity: 0, y: 32 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 32 }}
-        transition={{ type: "spring", damping: 20 }}
-        className="panel shadow-glow-soft w-[92%] max-w-lg p-7 relative"
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <h2 className="text-title text-2xl font-bold">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-mute hover:text-sub transition-colors px-2 py-1 rounded-md"
-            style={{ outline: "none" }}
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: "spring", duration: 0.4 }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative bg-space-600/80 border border-white/10 p-8 rounded-2xl max-w-md w-full shadow-glow"
           >
-            ✕
-          </button>
-        </div>
+            {/* ✖ Close button */}
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 text-ether-300 hover:text-ether-100 transition text-lg"
+              aria-label="Close"
+            >
+              ✕
+            </button>
 
-        {/* Notes */}
-        <ul className="mt-4 space-y-2">
-          {notes.map((n, i) => (
-            <li key={i} className="text-sub text-[15px] leading-relaxed">
-              • {n}
-            </li>
-          ))}
-        </ul>
+            <h2 className="text-xl font-bold text-ether-100 mb-4">{title}</h2>
 
-        {/* Actions */}
-        <div className="mt-6 flex gap-3 justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sub hover:text-title transition-colors"
-            style={{ border: `1px solid ${theme.border}` }}
-          >
-            Close
-          </button>
-          <button
-            onClick={onComplete}
-            className="px-4 py-2 rounded-lg font-medium"
-            style={{
-              background: `linear-gradient(90deg, ${theme.accent} 0%, ${theme.accent2} 100%)`,
-              color: "#0E1625",
-            }}
-          >
-            Mark Complete
-          </button>
-        </div>
-      </motion.div>
-    </div>
+            <ul className="space-y-2 mb-6 text-ether-300 text-sm">
+              {notes.map((note, i) => (
+                <li key={i}>• {note}</li>
+              ))}
+            </ul>
+
+            <div className="flex gap-3 justify-end">{renderButtons()}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

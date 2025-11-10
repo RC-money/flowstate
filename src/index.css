@@ -37,3 +37,7 @@ body {
 .text-title { color: #E5E7EB; }   /* theme.text */
 .text-sub   { color: #A7B2C3; }   /* theme.sub  */
 .text-mute  { color: #7A8799; }   /* theme.mute */
+@keyframes noiseShift {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(-20px, -20px); }
+}
