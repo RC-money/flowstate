@@ -1,73 +1,89 @@
-# React + TypeScript + Vite
+# 🌌 **Flowstate**
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> _"Your tasks, in motion."_
 
-Currently, two official plugins are available:
+🌀 Flowstate – Stable Build v1.0.0 (flowstate-stable-v1)
+...
+Release Date: November 10, 2025
+Commit: 5f253db
+Branch: flowstate-stable-v1
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+✨ Overview
 
-## React Compiler
+This is the first stable visual build of Flowstate — a reactive task board designed to embody the flow experience: clean, kinetic, and deeply satisfying to use.
+This version focuses on the core feel — motion, glow, and responsive polish — before deeper functionality layers are added.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+🎨 Features
+🌊 Dynamic Background
 
-## Expanding the ESLint configuration
+FlowBackground reacts smoothly to mouse movement with ethereal glowing orbs.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Built using Framer Motion with spring physics for lifelike fluidity.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Gradient layers combine deep navy (#0F172A → #020617) with animated light orbs.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+💡 Interactive Cards
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Cards pop out and glow when hovered, with soft elevation and energy pulses.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Hover animations are instant and smooth — no lag or flicker.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Glow colors synchronize with their column’s category tone:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+TO-DO → Cyan glow
+
+IN PROGRESS → Indigo glow
+
+DONE → Emerald glow
+
+🧩 Modal System
+
+Clicking a task opens a modal with dynamic action buttons:
+
+TO-DO: “Move to In Progress”
+
+IN PROGRESS: “Move to To-Do” or “Mark Complete” (with signature ether color glow)
+
+DONE: “Move to To-Do” or “Move to In Progress”
+
+Smooth pop-in and fade-out motion transitions for the modal window.
+
+📦 Drag & Drop
+
+Tasks are draggable across columns via @dnd-kit/core.
+
+Columns highlight subtly when hovered during a drag.
+
+Position transitions are animated for seamless visual continuity.
+
+⚙️ System Polish
+
+Background layers (GlowOverlay, NoiseOverlay) reintroduced with proper z-index layering.
+
+Shadows, blurs, and border-opacity tuned for visual depth.
+
+Tailwind CSS architecture maintained for full responsiveness.
+
+🚀 Tech Stack
+Layer	Tech
+Framework	React + TypeScript
+Animation	Framer Motion
+Drag & Drop	@dnd-kit/core
+Styling	Tailwind CSS
+Build	Vite
+🧱 Future Goals
+
+ Add persistent local storage for tasks
+
+ Add user authentication (Firebase or Supabase)
+
+ Introduce task categories and due dates
+
+ Enable dark/light adaptive theming
+
+ Deploy via Vercel or GitHub Pages
+
+💬 Developer Notes
+
+This version represents a milestone of visual fidelity — all motion, glow, and UI feel are now in sync.
+Next phases should focus on state persistence and data structure expansion, keeping this branch as your “feel baseline.”
