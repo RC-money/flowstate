@@ -1,82 +1,49 @@
-import { motion, useDragControls } from "motion/react";
-import { useState } from "react";
+import React from "react";
+import { motion } from "framer-motion";
+import type { Task } from "../App";
 
 interface TaskCardProps {
   id: string;
   title: string;
-  status: "todo" | "inprogress" | "done";
+  status: Task["status"];
   onClick?: () => void;
-  onMove?: (id: string, newStatus: "todo" | "inprogress" | "done") => void;
-  onReorder?: (dragId: string, targetId: string, status: string) => void;
 }
 
-export function TaskCard({
-  id,
-  title,
-  status,
-  onClick,
-  onMove,
-  onReorder,
-}: TaskCardProps) {
-  const controls = useDragControls();
-  const [isDragging, setIsDragging] = useState(false);
-
-  const color =
-    status === "done"
-      ? "text-emerald-300"
-      : status === "inprogress"
-      ? "text-sky-300"
-      : "text-slate-200";
-
-  const glowColor =
-    status === "done"
-      ? "rgba(16,185,129,0.25)"
-      : status === "inprogress"
-      ? "rgba(56,189,248,0.25)"
-      : "rgba(148,163,184,0.2)";
+export default function TaskCard({ id, title, status, onClick }: TaskCardProps) {
+  // accent based on column
+  const accent =
+    status === "TO-DO"
+      ? "#22d3ee" // cyan-400
+      : status === "IN PROGRESS"
+      ? "#818cf8" // indigo-400
+      : "#10b981"; // emerald-500
 
   return (
     <motion.div
       layout
-      drag
-      dragElastic={0.25}
-      dragMomentum={0.3}
-      dragControls={controls}
-      onDragStart={() => setIsDragging(true)}
-      onDragEnd={(event, info) => {
-        setIsDragging(false);
-
-        // Detect column drop
-        const cols = document.querySelectorAll(".kanban-column");
-        cols.forEach((col) => {
-          const rect = col.getBoundingClientRect();
-          if (
-            info.point.x > rect.left &&
-            info.point.x < rect.right &&
-            info.point.y > rect.top &&
-            info.point.y < rect.bottom
-          ) {
-            const newStatus = col.getAttribute("data-status") as
-              | "todo"
-              | "inprogress"
-              | "done";
-            if (newStatus && newStatus !== status) {
-              onMove?.(id, newStatus);
-            }
-          }
-        });
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 250, damping: 20 }}
+      onClick={onClick}
+      style={{
+        border: `1px solid ${accent}33`, // faint accent border
+        boxShadow: "0 0 0px rgba(0,0,0,0)",
       }}
-      whileHover={!isDragging ? { scale: 1.04, boxShadow: `0 0 30px ${glowColor}` } : {}}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
-      className={`p-4 rounded-xl bg-space-500/60 shadow-soft ${
-        isDragging ? "cursor-grabbing" : "cursor-grab"
-      } transition-all duration-300 backdrop-blur-md border border-white/5`}
-      onClick={() => {
-        if (!isDragging && onClick) onClick();
+      className={`
+        cursor-pointer select-none p-5 rounded-xl
+        bg-[#0f172a]/80 backdrop-blur-sm
+        hover:shadow-[0_0_15px_rgba(0,0,0,0.3)]
+        transition-all duration-200 ease-out
+      `}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = `0 0 15px ${accent}66`;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "0 0 0px rgba(0,0,0,0)";
       }}
     >
-      <h3 className={`font-medium ${color}`}>{title}</h3>
+      <h4 className="text-lg font-semibold mb-1">{title}</h4>
+      <p className="text-xs uppercase tracking-wide text-slate-500">{status}</p>
     </motion.div>
   );
 }

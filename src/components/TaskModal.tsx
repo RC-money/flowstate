@@ -1,125 +1,85 @@
-import { motion, AnimatePresence } from "motion/react";
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import type { Task } from "../App";
 
 interface TaskModalProps {
-  isOpen: boolean;
+  task: Task | null;
   onClose: () => void;
-  title: string;
-  notes: string[];
-  status?: "todo" | "inprogress" | "done";
-  onComplete: () => void;
-  onMove?: (newStatus: "todo" | "inprogress" | "done") => void;
+  onMove: (id: string, newStatus: Task["status"]) => void;
 }
 
-export function TaskModal({
-  isOpen,
-  onClose,
-  title,
-  notes,
-  status = "todo",
-  onComplete,
-  onMove,
-}: TaskModalProps) {
-  if (!isOpen) return null;
+export default function TaskModal({ task, onClose, onMove }: TaskModalProps) {
+  if (!task) return null;
 
   const renderButtons = () => {
-    switch (status) {
-      case "todo":
+    switch (task.status) {
+      case "TO-DO":
         return (
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onMove?.("inprogress")}
-            className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 transition text-white font-medium"
+          <button
+            onClick={() => onMove(task.id, "IN PROGRESS")}
+            className="px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-400/40 rounded-lg text-indigo-300 transition-all"
           >
             Move to In Progress
-          </motion.button>
+          </button>
         );
-
-      case "inprogress":
+      case "IN PROGRESS":
         return (
-          <>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onComplete}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition text-white font-medium"
+          <div className="flex gap-3">
+            <button
+              onClick={() => onMove(task.id, "TO-DO")}
+              className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-400/40 rounded-lg text-cyan-300 transition-all"
+            >
+              Move to To-Do
+            </button>
+            <button
+              onClick={() => onMove(task.id, "DONE")}
+              className="px-4 py-2 bg-gradient-to-r from-indigo-400 via-emerald-400 to-cyan-400 text-white font-semibold rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.6)] hover:shadow-[0_0_25px_rgba(99,102,241,0.9)] transition-all"
             >
               Mark Complete
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onMove?.("todo")}
-              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-white font-medium"
+            </button>
+          </div>
+        );
+      case "DONE":
+        return (
+          <div className="flex gap-3">
+            <button
+              onClick={() => onMove(task.id, "TO-DO")}
+              className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-400/40 rounded-lg text-cyan-300 transition-all"
             >
               Move to To-Do
-            </motion.button>
-          </>
-        );
-
-      case "done":
-        return (
-          <>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onMove?.("inprogress")}
-              className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 transition text-white font-medium"
+            </button>
+            <button
+              onClick={() => onMove(task.id, "IN PROGRESS")}
+              className="px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-400/40 rounded-lg text-indigo-300 transition-all"
             >
               Move to In Progress
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onMove?.("todo")}
-              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-white font-medium"
-            >
-              Move to To-Do
-            </motion.button>
-          </>
+            </button>
+          </div>
         );
     }
   };
 
   return (
     <AnimatePresence>
-      {isOpen && (
+      <motion.div
+        className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50"
-          onClick={onClose}
+          className="bg-[#0f172a]/90 border border-white/10 rounded-2xl p-8 max-w-md w-full text-center"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", duration: 0.4 }}
-            onClick={(e) => e.stopPropagation()}
-            className="relative bg-space-600/80 border border-white/10 p-8 rounded-2xl max-w-md w-full shadow-glow"
-          >
-            {/* ✖ Close button */}
-            <button
-              onClick={onClose}
-              className="absolute top-3 right-3 text-ether-300 hover:text-ether-100 transition text-lg"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-
-            <h2 className="text-xl font-bold text-ether-100 mb-4">{title}</h2>
-
-            <ul className="space-y-2 mb-6 text-ether-300 text-sm">
-              {notes.map((note, i) => (
-                <li key={i}>• {note}</li>
-              ))}
-            </ul>
-
-            <div className="flex gap-3 justify-end">{renderButtons()}</div>
-          </motion.div>
+          <h2 className="text-2xl font-semibold mb-4">{task.title}</h2>
+          <p className="text-slate-400 mb-6">{task.status}</p>
+          <div className="flex justify-center gap-3">{renderButtons()}</div>
         </motion.div>
-      )}
+      </motion.div>
     </AnimatePresence>
   );
 }

@@ -1,13 +1,13 @@
-export function NoiseOverlay() {
+import React from "react";
+
+export default function NoiseOverlay() {
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-0 opacity-[0.06] mix-blend-soft-light"
+      className="absolute inset-0 pointer-events-none opacity-[0.04] mix-blend-overlay"
       style={{
         backgroundImage:
-          "url('https://grainy-gradients.vercel.app/noise.svg')",
-        backgroundSize: "300px 300px",
-        animation: "noiseShift 1.5s steps(8) infinite",
+          "url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEX///+nxBvIAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==')",
       }}
-    ></div>
+    />
   );
 }

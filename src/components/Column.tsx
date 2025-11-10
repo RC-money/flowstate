@@ -1,15 +1,44 @@
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+// src/components/Column.tsx
+import React from "react";
 import Droppable from "./Droppable";
-import Card from "./Card";
+import TaskCard from "./TaskCard";
+import type { Task } from "../App";
 
-export default function Column({ id, title, cards }) {
+interface ColumnProps {
+  id: string;
+  title: string;
+  cards: Task[];
+  onCardClick: (task: Task) => void;
+}
+
+export default function Column({ id, title, cards, onCardClick }: ColumnProps) {
+  const color =
+    title === "TO-DO"
+      ? "text-cyan-400"
+      : title === "IN PROGRESS"
+      ? "text-indigo-400"
+      : "text-emerald-400";
+  const bar =
+    title === "TO-DO"
+      ? "bg-cyan-400"
+      : title === "IN PROGRESS"
+      ? "bg-indigo-400"
+      : "bg-emerald-400";
+
   return (
-    <Droppable id={id}>
-      <h2 className="text-ether-300 font-bold mb-3">{title}</h2>
-      <div className="bg-space-600/60 rounded-2xl p-3 min-h-[280px]">
-        <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
-          {cards.map(c => <Card key={c.id} id={c.id} title={c.title} />)}
-        </SortableContext>
+    <Droppable id={id} className="flex flex-col bg-[#0F172A]/40 rounded-2xl p-6 border border-white/10 backdrop-blur-xl">
+      <h3 className={`text-lg font-semibold mb-3 ${color}`}>{title}</h3>
+      <div className={`h-[3px] w-1/2 rounded-full mb-5 ${bar}`} />
+      <div className="space-y-3">
+        {cards.map((card) => (
+          <TaskCard
+            key={card.id}
+            id={card.id}
+            title={card.title}
+            status={card.status}
+            onClick={() => onCardClick(card)}
+          />
+        ))}
       </div>
     </Droppable>
   );

@@ -1,0 +1,30 @@
+import React from "react";
+import Column from "./Column";
+import type { Task } from "../App";
+
+interface BoardProps {
+  tasks: Task[];
+  onCardClick: (task: Task) => void;
+}
+
+export default function Board({ tasks, onCardClick }: BoardProps) {
+  const columns = [
+    { id: "TO-DO", title: "TO-DO" },
+    { id: "IN PROGRESS", title: "IN PROGRESS" },
+    { id: "DONE", title: "DONE" },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {columns.map((col) => (
+        <Column
+          key={col.id}
+          id={col.id}
+          title={col.title}
+          cards={tasks.filter((t) => t.status === col.id)}
+          onCardClick={onCardClick}
+        />
+      ))}
+    </div>
+  );
+}
