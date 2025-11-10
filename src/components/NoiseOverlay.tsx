@@ -1,13 +1,22 @@
-export function NoiseOverlay() {
+import { motion } from "motion/react";
+
+export default function NoiseOverlay() {
   return (
-    <div
-      className="pointer-events-none fixed inset-0 z-0 opacity-[0.06] mix-blend-soft-light"
+    <motion.div
+      className="pointer-events-none absolute inset-0 z-[25]"
       style={{
-        backgroundImage:
-          "url('https://grainy-gradients.vercel.app/noise.svg')",
-        backgroundSize: "300px 300px",
-        animation: "noiseShift 1.5s steps(8) infinite",
+        backgroundImage: `
+          repeating-radial-gradient(circle at 0 0, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 100%)`,
+        backgroundSize: "4px 4px",
+        mixBlendMode: "overlay",
+        opacity: 0.25,
       }}
-    ></div>
+      animate={{ opacity: [0.15, 0.25, 0.15] }}
+      transition={{
+        repeat: Infinity,
+        duration: 6,
+        ease: "easeInOut",
+      }}
+    />
   );
 }

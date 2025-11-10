@@ -1,147 +1,225 @@
-import React, { useState } from "react";
-import Card from "./components/Card";
-import Column from "./components/Column";
-import {
-  DndContext,
-  closestCenter,
-  DragEndEvent,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useState } from "react";
+import { motion } from "motion/react";
+import { Plus } from "lucide-react";
 
-type ColumnId = "todo" | "inprogress" | "done";
-type CardType = { id: string; title: string };
-type Columns = Record<ColumnId, CardType[]>;
+import { TaskCard } from "./components/TaskCard";
+import { TaskModal } from "./components/TaskModal";
+import { ProgressIndicator } from "./components/ProgressIndicator";
+import FlowBackground from "./components/FlowBackground";
+import GlowOverlay from "./components/GlowOverlay";
+import NoiseOverlay from "./components/NoiseOverlay";
+
+interface Task {
+  id: string;
+  title: string;
+  status: "todo" | "inprogress" | "done";
+  notes: string[];
+}
 
 export default function App() {
-  const [columns, setColumns] = useState<Columns>({
-    todo: [
-      { id: "c1", title: "Design homepage layout" },
-      { id: "c2", title: "Build authentication system" },
-    ],
-    inprogress: [
-      { id: "c3", title: "Create dashboard components" },
-      { id: "c4", title: "Write API documentation" },
-    ],
-    done: [
-      { id: "c5", title: "Set up CI/CD pipeline" },
-      { id: "c6", title: "Conduct user testing" },
-    ],
-  });
+  const [tasks, setTasks] = useState<Task[]>([
+    {
+      id: "1",
+      title: "Design homepage layout",
+      status: "todo",
+      notes: [
+        "Create wireframes for desktop and mobile",
+        "Define color scheme and typography",
+        "Design hero section with call-to-action",
+      ],
+    },
+    {
+      id: "2",
+      title: "Build authentication system",
+      status: "todo",
+      notes: [
+        "Set up user registration flow",
+        "Implement login with OAuth",
+        "Add password reset functionality",
+      ],
+    },
+    {
+      id: "3",
+      title: "Create dashboard components",
+      status: "inprogress",
+      notes: [
+        "Build reusable card components",
+        "Implement data visualization charts",
+        "Add responsive grid layout",
+      ],
+    },
+    {
+      id: "4",
+      title: "Write API documentation",
+      status: "inprogress",
+      notes: [
+        "Document all endpoints",
+        "Add code examples",
+        "Create authentication guide",
+      ],
+    },
+    {
+      id: "5",
+      title: "Set up CI/CD pipeline",
+      status: "done",
+      notes: [
+        "Configure GitHub Actions",
+        "Set up automated testing",
+        "Deploy to production environment",
+      ],
+    },
+    {
+      id: "6",
+      title: "Conduct user testing",
+      status: "done",
+      notes: [
+        "Recruit 10 beta testers",
+        "Gather feedback on UX",
+        "Iterate based on findings",
+      ],
+    },
+  ]);
 
-  const [activeCard, setActiveCard] = useState<CardType | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeColumn, setActiveColumn] = useState<"todo" | "inprogress" | "done" | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
-  );
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setIsModalOpen(true);
+  };
 
-  function titleFor(colId: ColumnId) {
-    switch (colId) {
-      case "todo":
-        return "TO-DO";
-      case "inprogress":
-        return "IN PROGRESS";
-      case "done":
-        return "DONE";
-      default:
-        return colId;
+  const handleComplete = () => {
+    if (selectedTask) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === selectedTask.id ? { ...t, status: "done" as const } : t
+        )
+      );
+      setIsModalOpen(false);
     }
-  }
+  };
 
-  function findCard(cardId: string) {
-    for (const col of Object.keys(columns) as ColumnId[]) {
-      const idx = columns[col].findIndex((c) => c.id === cardId);
-      if (idx !== -1) return { col, idx };
+  const handleMoveToProgress = () => {
+    if (selectedTask) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === selectedTask.id ? { ...t, status: "inprogress" as const } : t
+        )
+      );
+      setIsModalOpen(false);
     }
-    return null;
-  }
+  };
 
-  function onDragStart({ active }: any) {
-    const where = findCard(active.id as string);
-    if (!where) return;
-    setActiveCard(columns[where.col][where.idx]);
-  }
-
-  function onDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveCard(null);
-    if (!over) return;
-
-    const from = findCard(String(active.id));
-    if (!from) return;
-
-    const possibleColumns: ColumnId[] = ["todo", "inprogress", "done"];
-    const overId = String(over.id);
-    const toCol: ColumnId | undefined =
-      (possibleColumns as string[]).includes(overId)
-        ? (overId as ColumnId)
-        : findCard(overId)?.col;
-
-    if (!toCol) return;
-
-    setColumns((prev) => {
-      const next: Columns = {
-        todo: [...prev.todo],
-        inprogress: [...prev.inprogress],
-        done: [...prev.done],
-      };
-
-      // Remove card from source column
-      const [moved] = next[from.col].splice(from.idx, 1);
-
-      // Insert card in new column (at end by default)
-      let insertIndex = next[toCol].length;
-
-      // If hovering a specific card, insert before it
-      if (!possibleColumns.includes(overId)) {
-        const overPos = next[toCol].findIndex((c) => c.id === overId);
-        if (overPos !== -1) insertIndex = overPos;
-      }
-
-      next[toCol].splice(insertIndex, 0, moved);
-      return next;
-    });
-  }
+  const todoTasks = tasks.filter((t) => t.status === "todo");
+  const inProgressTasks = tasks.filter((t) => t.status === "inprogress");
+  const doneTasks = tasks.filter((t) => t.status === "done");
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-    >
-      <div className="min-h-screen bg-space-700 text-ether-100 px-8 py-10">
-        <header className="text-center mb-12">
-          <h1 className="text-3xl font-extrabold bg-ether-gradient bg-clip-text text-transparent animate-pulseSoft tracking-wide">
-            FLOWSTATE
-          </h1>
-          <p className="mt-1 text-ether-300">Your tasks, in motion.</p>
-        </header>
+    <div className="relative min-h-screen overflow-hidden font-sans text-white">
+      {/* Dynamic Background Layers */}
+      <FlowBackground />
+      <GlowOverlay activeColumn={activeColumn} />
+      <NoiseOverlay />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-7xl mx-auto">
-          {(["todo", "inprogress", "done"] as ColumnId[]).map((colId) => (
-            <Column
-              key={colId}
-              id={colId}
-              title={titleFor(colId)}
-              cards={columns[colId]}
-            />
+      {/* Header */}
+      <motion.header
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="border-b px-8 py-8 relative z-20"
+        style={{ borderColor: "rgba(148,163,184,0.18)" }}
+      >
+        <h1 className="text-3xl font-extrabold tracking-wide">FLOWSTATE</h1>
+        <p className="mt-2 text-slate-400">Your tasks, in motion.</p>
+      </motion.header>
+
+      {/* Kanban Board */}
+      <main className="px-8 py-16 flex justify-center items-start relative z-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-7xl">
+          {[
+            { title: "TO-DO", tasks: todoTasks, key: "todo" },
+            { title: "IN PROGRESS", tasks: inProgressTasks, key: "inprogress" },
+            { title: "DONE", tasks: doneTasks, key: "done" },
+          ].map((col) => (
+            <motion.div
+              key={col.key}
+              onMouseEnter={() => setActiveColumn(col.key as any)}
+              onMouseLeave={() => setActiveColumn(null)}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="mb-6">
+                <h3 className="mb-2 text-xl font-semibold tracking-wide">{col.title}</h3>
+                <ProgressIndicator
+                  total={tasks.length}
+                  completed={col.tasks.length}
+                  colorFrom="#67E8F9"
+                  colorTo="#93C5FD"
+                />
+              </div>
+
+              <div className="space-y-4">
+                {col.tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    title={task.title}
+                    status={task.status}
+                    onClick={() => handleTaskClick(task)}
+                  />
+                ))}
+
+                {col.key === "todo" && (
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full py-4 rounded-xl border-2 border-dashed border-slate-600 text-slate-400 flex items-center justify-center gap-2 hover:text-white hover:border-slate-400 transition-all duration-300"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add Task</span>
+                  </motion.button>
+                )}
+              </div>
+            </motion.div>
           ))}
         </div>
+      </main>
 
-        <DragOverlay>
-          {activeCard ? (
-            <Card
-              id={activeCard.id}
-              title={activeCard.title}
-              className="shadow-2xl scale-[1.02]"
-            />
-          ) : null}
-        </DragOverlay>
-      </div>
-    </DndContext>
+      {/* Modal */}
+      {selectedTask && (
+        <TaskModal
+  isOpen={isModalOpen}
+  onClose={() => setIsModalOpen(false)}
+  title={selectedTask.title}
+  notes={selectedTask.notes}
+  onMoveToProgress={() => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === selectedTask.id ? { ...t, status: "inprogress" as const } : t
+      )
+    );
+    setIsModalOpen(false);
+  }}
+  onMoveToTodo={() => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === selectedTask.id ? { ...t, status: "todo" as const } : t
+      )
+    );
+    setIsModalOpen(false);
+  }}
+  onComplete={() => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === selectedTask.id ? { ...t, status: "done" as const } : t
+      )
+    );
+    setIsModalOpen(false);
+  }}
+/>
+
+      )}
+    </div>
   );
 }

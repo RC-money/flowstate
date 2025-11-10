@@ -1,7 +1,7 @@
 import { motion, useMotionValue, useTransform, useAnimationFrame } from "motion/react";
 import { useRef } from "react";
 
-export function FlowBackground() {
+export default function FlowBackground() {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -9,7 +9,6 @@ export function FlowBackground() {
   const translateX = useTransform(mouseX, [0, window.innerWidth], ["-5%", "5%"]);
   const translateY = useTransform(mouseY, [0, window.innerHeight], ["-5%", "5%"]);
 
-  // Smooth follow animation
   useAnimationFrame(() => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
@@ -29,16 +28,11 @@ export function FlowBackground() {
       onMouseMove={handleMouseMove}
       className="absolute inset-0 overflow-hidden -z-10"
     >
-      {/* Main gradient orb */}
       <motion.div
         className="absolute w-[700px] h-[700px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(91,92,240,0.15)_0%,_transparent_70%)]"
-        style={{
-          translateX,
-          translateY,
-        }}
+        style={{ translateX, translateY }}
         transition={{ type: "spring", stiffness: 20, damping: 15 }}
       />
-      {/* Accent orb */}
       <motion.div
         className="absolute bottom-0 right-0 w-[450px] h-[450px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(165,175,255,0.12)_0%,_transparent_70%)]"
         style={{
