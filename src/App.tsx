@@ -13,6 +13,7 @@ import {
 import Board from "./components/Board";
 import Card from "./components/Card";
 import TaskModal from "./components/TaskModal";
+import { useHotkeys } from "./hooks/useHotkeys";
 
 // Types exported for Column/Board typing
 export type Status = "TO-DO" | "IN PROGRESS" | "DONE";
@@ -20,7 +21,17 @@ export type Task = {
   id: string;
   title: string;
   status: Status;
+  description?: string;
 };
+
+function createBlankTask(status: Status): Task {
+  return {
+    id: `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: "",
+    description: "",
+    status,
+  };
+}
 
 const initialTasks: Task[] = [
   { id: "t1", title: "Create dashboard components", status: "TO-DO" },
@@ -33,7 +44,11 @@ const initialTasks: Task[] = [
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"new" | "edit">("new");
+  const [draftTask, setDraftTask] = useState<Task | null>(null);
+  const [focusedColumn, setFocusedColumn] = useState<Status | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -47,8 +62,31 @@ export default function App() {
     return m;
   }, [tasks]);
 
-  const handleCardClick = (task: Task) => setSelectedTask(task);
-  const handleCloseModal = () => setSelectedTask(null);
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setDraftTask(null);
+  };
+
+  const handleEditTask = (task: Task) => {
+    const freshTask = tasksById[task.id] ?? task;
+    setModalMode("edit");
+    setDraftTask(freshTask);
+    setActiveTask(freshTask);
+    setFocusedColumn(freshTask.status);
+    setIsModalOpen(true);
+  };
+
+  const handleAddTask = (status: Status) => {
+    const nextDraft = createBlankTask(status);
+    setModalMode("new");
+    setDraftTask(nextDraft);
+    setFocusedColumn(status);
+    setIsModalOpen(true);
+  };
+
+  const handleCardClick = (task: Task) => {
+    handleEditTask(task);
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -71,16 +109,46 @@ export default function App() {
           t.id === String(active.id) ? { ...t, status: overId as Status } : t
         )
       );
+      setActiveTask((prev) =>
+        prev && prev.id === String(active.id)
+          ? { ...prev, status: overId as Status }
+          : prev
+      );
     }
     setActiveId(null);
   };
 
-  const handleMove = (id: string, newStatus: Status) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t))
-    );
-    setSelectedTask(null);
+  const handleSaveTask = (task: Task) => {
+    setTasks((prev) => {
+      if (modalMode === "new") {
+        return [...prev, task];
+      }
+      return prev.map((t) => (t.id === task.id ? { ...t, ...task } : t));
+    });
+    setActiveTask(task);
+    setFocusedColumn(task.status);
+    closeModal();
   };
+
+  useHotkeys([
+    {
+      combo: "n",
+      handler: () => handleAddTask(focusedColumn ?? "TO-DO"),
+      enabled: !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    {
+      combo: "e",
+      handler: () => {
+        if (!activeTask) return;
+        handleEditTask(activeTask);
+      },
+      enabled: Boolean(activeTask) && !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
+  ]);
 
   return (
     <main className="min-h-screen bg-[#0B1220] text-white">
@@ -88,7 +156,7 @@ export default function App() {
         <h1 className="text-center text-4xl font-extrabold tracking-wide">FLOWSTATE</h1>
         <p className="text-center mt-3 text-[#8aa0b8]">Your tasks, in motion.</p>
 
-        <div className="mt-10">
+        <div className="board-wrapper mt-10">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
@@ -96,7 +164,13 @@ export default function App() {
             onDragEnd={handleDragEnd}
           >
             {/* The three droppable columns are inside Board */}
-            <Board tasks={tasks} onCardClick={handleCardClick} />
+            <Board
+              {...({
+                tasks,
+                onCardClick: handleCardClick,
+                onAdd: handleAddTask,
+              } as any)}
+            />
 
             {/* Floating card while dragging for smooth visuals */}
             <DragOverlay
@@ -113,7 +187,14 @@ export default function App() {
           </DndContext>
         </div>
       </div>
-      <TaskModal task={selectedTask} onClose={handleCloseModal} onMove={handleMove} />
+      {isModalOpen ? (
+        <TaskModal
+          mode={modalMode}
+          initialTask={draftTask ?? undefined}
+          onSave={handleSaveTask}
+          onClose={closeModal}
+        />
+      ) : null}
     </main>
   );
 }

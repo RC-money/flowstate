@@ -8,10 +8,19 @@ type Props = {
   title: string;
   cards: Task[];
   onCardClick: (t: Task) => void;
+  onAdd?: (status: Status) => void;
 };
 
-export default function Column({ id, title, cards, onCardClick }: Props) {
+export default function Column({ id, title, cards, onCardClick, onAdd }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id });
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented) return;
+    if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      onAdd?.(id);
+    }
+  };
 
   const lineFrom =
     id === "TO-DO"
@@ -23,12 +32,22 @@ export default function Column({ id, title, cards, onCardClick }: Props) {
   return (
     <section
       ref={setNodeRef}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       className={[
         "w-full",
         "rounded-2xl border border-white/10 bg-transparent",
-        "p-5 transition-colors",
+        "p-5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
+        "data-[focused=true]:border-cyan-400/40 data-[focused=true]:bg-white/5",
         isOver ? "bg-white/8" : "",
       ].join(" ")}
+      data-focused="false"
+      onFocus={(event) => {
+        event.currentTarget.dataset.focused = "true";
+      }}
+      onBlur={(event) => {
+        event.currentTarget.dataset.focused = "false";
+      }}
     >
       <header className="mb-4">
         <h3
@@ -40,6 +59,21 @@ export default function Column({ id, title, cards, onCardClick }: Props) {
           {title}
         </h3>
         <div className={`mt-2 h-[3px] w-32 rounded bg-gradient-to-r ${lineFrom} to-transparent`} />
+        <button
+          type="button"
+          onClick={() => onAdd?.(id)}
+          aria-label={`Add task to ${title}`}
+          className="mt-3 inline-flex items-center gap-1 rounded-xl border border-white/5 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/10"
+        >
+          <span className="text-base leading-none">+</span>
+          New task
+          <span
+            aria-hidden="true"
+            className="ml-2 rounded-md border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-300"
+          >
+            N
+          </span>
+        </button>
       </header>
 
       <div className="space-y-4">

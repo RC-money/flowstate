@@ -1,13 +1,14 @@
 import React from "react";
 import Column from "./Column";
-import type { Task } from "../App";
+import type { Status, Task } from "../App";
 
 interface BoardProps {
   tasks: Task[];
   onCardClick: (task: Task) => void;
+  onAdd?: (status: Status) => void;
 }
 
-export default function Board({ tasks, onCardClick }: BoardProps) {
+export default function Board({ tasks, onCardClick, onAdd }: BoardProps) {
   const columns = [
     { id: "TO-DO", title: "TO-DO" },
     { id: "IN PROGRESS", title: "IN PROGRESS" },
@@ -23,6 +24,7 @@ export default function Board({ tasks, onCardClick }: BoardProps) {
           title={col.title}
           cards={tasks.filter((t) => t.status === col.id)}
           onCardClick={onCardClick}
+          onAdd={onAdd}
         />
       ))}
     </div>
