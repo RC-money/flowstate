@@ -1,37 +1,20 @@
-import { motion } from "motion/react";
+import React from "react";
+import { motion } from "@motionone/react"
+;
 
-export function FloatingOrbs() {
-  const orbs = [
-    { size: 180, color: "rgba(91,92,240,0.25)", x: "10%", y: "15%" },
-    { size: 220, color: "rgba(165,175,255,0.18)", x: "70%", y: "40%" },
-    { size: 260, color: "rgba(124,131,255,0.12)", x: "45%", y: "75%" },
-  ];
-
+export default function FloatingOrbs() {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {orbs.map((orb, i) => (
-        <motion.div
-          key={i}
-          className="absolute rounded-full blur-[120px]"
-          style={{
-            width: orb.size,
-            height: orb.size,
-            background: orb.color,
-            top: orb.y,
-            left: orb.x,
-          }}
-          animate={{
-            y: ["0%", "-4%", "0%"],
-            x: ["0%", "2%", "0%"],
-            opacity: [0.4, 0.6, 0.4],
-          }}
-          transition={{
-            duration: 14 + i * 3,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
-      ))}
-    </div>
+    <>
+      <motion.div
+        className="absolute top-20 left-1/3 w-64 h-64 rounded-full bg-indigo-500/10 blur-3xl"
+        animate={{ y: [0, 20, 0], opacity: [0.6, 0.8, 0.6] }}
+        transition={{ repeat: Infinity, duration: 14 }}
+      />
+      <motion.div
+        className="absolute bottom-10 right-1/4 w-80 h-80 rounded-full bg-cyan-500/10 blur-3xl"
+        animate={{ y: [0, -20, 0], opacity: [0.5, 0.7, 0.5] }}
+        transition={{ repeat: Infinity, duration: 16 }}
+      />
+    </>
   );
 }

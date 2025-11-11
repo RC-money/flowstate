@@ -1,32 +1,35 @@
-// src/components/Card.tsx
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import React from "react";
+import { useDraggable } from "@dnd-kit/core";
+import type { Status } from "../App";
 
-export default function Card({ id, title }: { id: string; title: string }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
+type Props = {
+  id: string;
+  title: string;
+  status: Status;
+};
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  };
+export default function Card({ id, title, status }: Props) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id });
+
+  const style: React.CSSProperties = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
 
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
       {...listeners}
+      {...attributes}
       style={style}
-      className="p-4 mb-3 rounded-xl bg-space-500 shadow-glow hover:animate-pulseSoft cursor-grab active:cursor-grabbing select-none"
+      className={[
+        "rounded-xl border border-white/10 bg-white/5 px-5 py-4",
+        "backdrop-blur-sm transition-shadow",
+        isDragging ? "shadow-xl shadow-black/50" : "hover:shadow-md",
+      ].join(" ")}
     >
-      <h3 className="font-medium text-ether-200">{title}</h3>
+      <p className="font-semibold">{title}</p>
+      <p className="text-xs mt-2 uppercase tracking-wide text-white/50">{status}</p>
     </div>
   );
 }
