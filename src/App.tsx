@@ -1,5 +1,11 @@
 // src/App.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DndContext,
   DragOverlay,
@@ -14,9 +20,13 @@ import Board from "./components/Board";
 import Card from "./components/Card";
 import TaskModal from "./components/TaskModal";
 import GraphView from "./components/GraphView/GraphView";
+import NoiseOverlay from "./components/NoiseOverlay";
 import { useHotkeys } from "./hooks/useHotkeys";
+import CommandPalette, { type Command } from "./components/CommandPalette";
+import AskFlowPanel from "./components/AskFlowPanel";
+import { ToastProvider, useToast } from "./components/Toast";
+import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 
-// Types exported for Column/Board typing
 export type Status = "TO-DO" | "IN PROGRESS" | "DONE";
 export type Task = {
   id: string;
@@ -26,6 +36,7 @@ export type Task = {
 };
 
 type ViewMode = "board" | "graph";
+type ToastVariant = "success" | "warn" | "error";
 
 function createBlankTask(status: Status): Task {
   return {
@@ -45,6 +56,18 @@ const initialTasks: Task[] = [
 ];
 
 export default function App() {
+  return (
+    <ToastProvider>
+      <div className="min-h-screen bg-[#0B1220] text-white">
+        <NoiseOverlay />
+        <AppShell />
+      </div>
+    </ToastProvider>
+  );
+}
+
+function AppShell() {
+  const { show } = useToast();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -57,6 +80,26 @@ export default function App() {
     const stored = window.sessionStorage.getItem("flowstate:view");
     return stored === "graph" ? "graph" : "board";
   });
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const lastAddSourceRef = useRef<"keyboard" | "click">("click");
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message: string; variant?: ToastVariant }>).detail;
+      if (!detail?.message) return;
+      show(detail.message, { variant: detail.variant });
+    };
+    window.addEventListener("flowstate:toast", handler as EventListener);
+    return () => window.removeEventListener("flowstate:toast", handler as EventListener);
+  }, [show]);
+
+  useEffect(() => {
+    const dev =
+      typeof import.meta !== "undefined" &&
+      Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+    if (dev) setAnalyticsEnabled(true);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -70,78 +113,136 @@ export default function App() {
     return m;
   }, [tasks]);
 
-  const closeModal = () => {
+  const pushToast = useCallback(
+    (message: string, variant: ToastVariant = "success") => {
+      show(message, { variant });
+      logEvent({ type: "toast:show", variant });
+    },
+    [show]
+  );
+
+  const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setDraftTask(null);
-  };
+  }, []);
 
-  const handleEditTask = (task: Task) => {
-    const freshTask = tasksById[task.id] ?? task;
-    setModalMode("edit");
-    setDraftTask(freshTask);
-    setActiveTask(freshTask);
-    setFocusedColumn(freshTask.status);
-    setIsModalOpen(true);
-  };
+  const handleEditTask = useCallback(
+    (task: Task) => {
+      const freshTask = tasksById[task.id] ?? task;
+      setModalMode("edit");
+      setDraftTask(freshTask);
+      setActiveTask(freshTask);
+      setFocusedColumn(freshTask.status);
+      setIsModalOpen(true);
+    },
+    [tasksById]
+  );
 
-  const handleAddTask = (status: Status) => {
-    const nextDraft = createBlankTask(status);
-    setModalMode("new");
-    setDraftTask(nextDraft);
-    setFocusedColumn(status);
-    setIsModalOpen(true);
-  };
+  const handleAddTask = useCallback(
+    (status: Status, source: "keyboard" | "click" = "click") => {
+      lastAddSourceRef.current = source;
+      const nextDraft = createBlankTask(status);
+      setModalMode("new");
+      setDraftTask(nextDraft);
+      setFocusedColumn(status);
+      setIsModalOpen(true);
+    },
+    []
+  );
 
-  const handleCardClick = (task: Task) => {
-    handleEditTask(task);
-  };
+  const handleCardClick = useCallback(
+    (task: Task) => handleEditTask(task),
+    [handleEditTask]
+  );
 
-  const handleOpenTaskById = (taskId: string) => {
-    const nextTask = tasksById[taskId];
-    if (nextTask) handleEditTask(nextTask);
-  };
+  const handleOpenTaskById = useCallback(
+    (taskId: string) => {
+      const nextTask = tasksById[taskId];
+      if (nextTask) handleEditTask(nextTask);
+    },
+    [tasksById, handleEditTask]
+  );
+
+  const handleMoveTask = useCallback(
+    (taskId: string, nextStatus: Status, method: "drag" | "menu" | "hotkey" = "menu") => {
+      const current = tasksById[taskId];
+      if (!current || current.status === nextStatus) return;
+
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId ? { ...task, status: nextStatus } : task
+        )
+      );
+      setActiveTask((prev) =>
+        prev && prev.id === taskId ? { ...prev, status: nextStatus } : prev
+      );
+      setDraftTask((prev) =>
+        prev && prev.id === taskId ? { ...prev, status: nextStatus } : prev
+      );
+      setFocusedColumn(nextStatus);
+      pushToast(`Moved to ${nextStatus}`, "success");
+      logEvent({ type: "task:move", method });
+    },
+    [pushToast, tasksById]
+  );
+
+  const handleDeleteTask = useCallback(
+    (taskId: string) => {
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+      setActiveTask((prev) => (prev?.id === taskId ? null : prev));
+      setDraftTask((prev) => (prev?.id === taskId ? null : prev));
+      if (draftTask?.id === taskId) {
+        closeModal();
+      }
+      pushToast("Task deleted", "warn");
+      logEvent({ type: "task:delete" });
+    },
+    [closeModal, draftTask, pushToast]
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const active = event.active;
-    const over = event.over;
-    if (!active || !over) {
-      setActiveId(null);
-      return;
-    }
-
-    // If dropped over a column, its id will be one of the Status values
-    const overId = String(over.id);
-    const possibleColumns: Status[] = ["TO-DO", "IN PROGRESS", "DONE"];
-    if (possibleColumns.includes(overId as Status)) {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === String(active.id) ? { ...t, status: overId as Status } : t
-        )
-      );
-      setActiveTask((prev) =>
-        prev && prev.id === String(active.id)
-          ? { ...prev, status: overId as Status }
-          : prev
-      );
-    }
-    setActiveId(null);
-  };
-
-  const handleSaveTask = (task: Task) => {
-    setTasks((prev) => {
-      if (modalMode === "new") {
-        return [...prev, task];
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const active = event.active;
+      const over = event.over;
+      if (!active || !over) {
+        setActiveId(null);
+        return;
       }
-      return prev.map((t) => (t.id === task.id ? { ...t, ...task } : t));
-    });
-    setActiveTask(task);
-    setFocusedColumn(task.status);
-    closeModal();
-  };
+
+      const overId = String(over.id);
+      const possibleColumns: Status[] = ["TO-DO", "IN PROGRESS", "DONE"];
+      if (possibleColumns.includes(overId as Status)) {
+        handleMoveTask(String(active.id), overId as Status, "drag");
+      }
+      setActiveId(null);
+    },
+    [handleMoveTask]
+  );
+
+  const handleSaveTask = useCallback(
+    (task: Task) => {
+      setTasks((prev) => {
+        if (modalMode === "new") {
+          return [...prev, task];
+        }
+        return prev.map((t) => (t.id === task.id ? { ...t, ...task } : t));
+      });
+      setActiveTask(task);
+      setFocusedColumn(task.status);
+      if (modalMode === "new") {
+        pushToast("Task created", "success");
+        logEvent({ type: "task:add", source: lastAddSourceRef.current });
+      } else {
+        pushToast("Task updated", "success");
+      }
+      closeModal();
+    },
+    [modalMode, closeModal, pushToast]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -155,7 +256,7 @@ export default function App() {
   useHotkeys([
     {
       combo: "n",
-      handler: () => handleAddTask(focusedColumn ?? "TO-DO"),
+      handler: () => handleAddTask(focusedColumn ?? "TO-DO", "keyboard"),
       enabled: !isModalOpen,
       preventDefault: true,
       stopPropagation: true,
@@ -172,39 +273,92 @@ export default function App() {
     },
   ]);
 
-  return (
-    <main className="min-h-screen bg-[#0B1220] text-white">
-      <div className="max-w-6xl mx-auto px-6 py-12">
-        <h1 className="text-center text-4xl font-extrabold tracking-wide">FLOWSTATE</h1>
-        <p className="text-center mt-3 text-[#8aa0b8]">Your tasks, in motion.</p>
-        <div className="mt-8 flex justify-center">
-          <div
-            role="group"
-            aria-label="Select view"
-            className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm"
-          >
-            {(["board", "graph"] as const).map((mode) => {
-              const isActive = view === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => handleViewChange(mode)}
-                  className={`px-5 py-2 text-sm font-semibold uppercase tracking-wide rounded-xl transition ${
-                    isActive
-                      ? "bg-white text-[#0B1220]"
-                      : "text-[#8aa0b8] hover:text-white"
-                  }`}
-                >
-                  {mode === "board" ? "Board" : "Graph"}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+  const commands: Command[] = useMemo(
+    () => [
+      {
+        id: "cmd-new-task",
+        label: "New Task",
+        hint: "N",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          handleAddTask(focusedColumn ?? "TO-DO", "keyboard");
+        },
+      },
+      {
+        id: "cmd-ask-flow",
+        label: "Ask Flow (AI panel)",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          setAskOpen(true);
+        },
+      },
+    ],
+    [focusedColumn, handleAddTask]
+  );
 
-        <div className="board-wrapper mt-10">
+  const handlePaletteOpen = useCallback(() => {
+    setPaletteOpen((prev) => {
+      if (!prev) {
+        logEvent({ type: "palette:open" });
+        return true;
+      }
+      return prev;
+    });
+  }, []);
+
+  return (
+    <>
+      <main className="mx-auto max-w-screen-2xl px-4 py-8 text-white">
+        <header className="text-center space-y-4">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-wide">FLOWSTATE</h1>
+            <p className="mt-3 text-[#8aa0b8]">Your tasks, in motion.</p>
+          </div>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={handlePaletteOpen}
+              className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+            >
+              ⌘K
+            </button>
+            <button
+              type="button"
+              onClick={() => setAskOpen(true)}
+              className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+            >
+              Ask Flow
+            </button>
+          </div>
+            <div className="flex justify-center mt-6 mb-4">
+              <div
+                role="group"
+                aria-label="Select view"
+                className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm"
+            >
+              {(["board", "graph"] as const).map((mode) => {
+                const isActive = view === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => handleViewChange(mode)}
+                    className={`px-5 py-2 text-sm font-semibold uppercase tracking-wide rounded-xl transition ${
+                      isActive
+                        ? "bg-white text-[#0B1220]"
+                        : "text-[#8aa0b8] hover:text-white"
+                    }`}
+                  >
+                    {mode === "board" ? "Board" : "Graph"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </header>
+
+        <div className="board-wrapper">
           {view === "board" ? (
             <DndContext
               sensors={sensors}
@@ -212,17 +366,14 @@ export default function App() {
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
-              {/* The three droppable columns are inside Board */}
               <Board
-                {...({
-                  view,
-                  tasks,
-                  onCardClick: handleCardClick,
-                  onAdd: handleAddTask,
-                } as any)}
+                tasks={tasks}
+                onCardClick={handleCardClick}
+                onAdd={(status) => handleAddTask(status, "click")}
+                onOpenTask={handleOpenTaskById}
+                onMoveTask={(taskId, next) => handleMoveTask(taskId, next, "menu")}
+                onDeleteTask={handleDeleteTask}
               />
-
-              {/* Floating card while dragging for smooth visuals */}
               <DragOverlay
                 dropAnimation={{ duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }}
               >
@@ -239,15 +390,28 @@ export default function App() {
             <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} />
           )}
         </div>
-      </div>
+      </main>
+
       {isModalOpen ? (
         <TaskModal
           mode={modalMode}
           initialTask={draftTask ?? undefined}
           onSave={handleSaveTask}
           onClose={closeModal}
+          onMove={(taskId, next) => handleMoveTask(taskId, next, "menu")}
+          onMarkDone={(taskId) => handleMoveTask(taskId, "DONE", "menu")}
+          onDelete={handleDeleteTask}
         />
       ) : null}
-    </main>
+
+      <CommandPalette
+        isOpen={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+        onGlobalOpen={handlePaletteOpen}
+      />
+
+      <AskFlowPanel open={askOpen} onClose={() => setAskOpen(false)} />
+    </>
   );
 }

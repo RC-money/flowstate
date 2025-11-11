@@ -85,12 +85,13 @@ export const tasksToGraph = (
     if (!id || seenNodeIds.has(id)) return;
 
     const status = (task.status ?? "TO-DO") as ColumnID;
-    const blocked =
+    const blockedValue =
       typeof task.blocked === "boolean"
         ? task.blocked
         : typeof (task as TaskLike).blocked === "boolean"
         ? (task as TaskLike).blocked
         : undefined;
+    const blocked = blockedValue === undefined ? undefined : Boolean(blockedValue);
     const tags = normalizeTags((task as TaskLike).tags);
     const dependsOn = normalizeDependsOn((task as TaskLike).dependsOn, id);
 

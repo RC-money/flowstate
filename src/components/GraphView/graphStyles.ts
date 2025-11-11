@@ -37,8 +37,10 @@ const getCoreRadius = (node: GraphNode, globalScale: number): number => {
   return base * scale;
 };
 
+type RenderableGraphNode = GraphNode & { x?: number; y?: number };
+
 export const drawNode = (
-  node: GraphNode,
+  node: RenderableGraphNode,
   ctx: CanvasRenderingContext2D,
   opts: { globalScale: number; highlighted: boolean; hovered: boolean }
 ) => {
@@ -89,3 +91,12 @@ export const getParticleColor = (
     ? "rgba(148, 197, 253, 0.9)"
     : "rgba(148, 163, 184, 0.7)";
 };
+
+export const legendSwatches = [
+  { label: "To-Do", color: "hsl(var(--accent-cyan))", kind: "node" },
+  { label: "In Progress", color: "hsl(var(--accent-indigo))", kind: "node" },
+  { label: "Done", color: "hsl(var(--accent-emerald))", kind: "node" },
+  { label: "Blocked", color: "hsl(var(--muted-strong))", kind: "node" },
+  { label: "Dependency", color: "hsl(var(--muted-strong))", kind: "link", dashed: false },
+  { label: "Temporal", color: "hsl(var(--muted))", kind: "link", dashed: true },
+] as const;

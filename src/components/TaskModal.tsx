@@ -8,23 +8,34 @@ interface TaskModalProps {
   initialTask?: RichTask | null;
   onSave: (task: RichTask) => void;
   onClose: () => void;
+  onMove?: (taskId: string, next: Task["status"]) => void;
+  onMarkDone?: (taskId: string) => void;
+  onDelete?: (taskId: string) => void;
 }
 
 const defaultStatus: Task["status"] = "TO-DO";
+const STATUS_OPTIONS: Task["status"][] = ["TO-DO", "IN PROGRESS", "DONE"];
 
 export default function TaskModal({
   mode,
   initialTask,
   onSave,
   onClose,
+  onMove,
+  onMarkDone,
+  onDelete,
 }: TaskModalProps) {
   const [title, setTitle] = useState(initialTask?.title ?? "");
   const [description, setDescription] = useState(initialTask?.description ?? "");
+  const [status, setStatus] = useState<Task["status"]>(
+    initialTask?.status ?? defaultStatus
+  );
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setTitle(initialTask?.title ?? "");
     setDescription(initialTask?.description ?? "");
+    setStatus(initialTask?.status ?? defaultStatus);
   }, [initialTask, mode]);
 
   useEffect(() => {
@@ -49,7 +60,7 @@ export default function TaskModal({
         (typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
           : `task-${Date.now()}`),
-      status: initialTask?.status ?? defaultStatus,
+      status,
       title: title.trim(),
       description: description.trim(),
     };
@@ -63,6 +74,29 @@ export default function TaskModal({
     if (event.key === "Enter" && !event.shiftKey && !isTextarea) {
       event.preventDefault();
       event.currentTarget.requestSubmit();
+    }
+  };
+
+  const handleMoveStatus = (next: Task["status"]) => {
+    setStatus(next);
+    if (initialTask?.id && onMove) {
+      onMove(initialTask.id, next);
+    }
+  };
+
+  const handleMarkDone = () => {
+    setStatus("DONE");
+    if (initialTask?.id) {
+      onMarkDone?.(initialTask.id);
+      onMove?.(initialTask.id, "DONE");
+    }
+  };
+
+  const handleDelete = () => {
+    if (!initialTask?.id || !onDelete) return;
+    if (window.confirm("Delete this task? This cannot be undone.")) {
+      onDelete(initialTask.id);
+      onClose();
     }
   };
 
@@ -116,21 +150,75 @@ export default function TaskModal({
           </label>
         </div>
 
-        <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 transition hover:bg-white/10 sm:w-auto"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-indigo-500/30 transition hover:opacity-90 sm:w-auto"
-            disabled={saveDisabled}
-          >
-            Save
-          </button>
+        <div className="mt-8 flex flex-col gap-4">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Move to
+              </span>
+              <div
+                role="group"
+                aria-label="Move task"
+                className="inline-flex rounded-xl bg-white/5 p-1"
+              >
+                {STATUS_OPTIONS.map((option) => {
+                  const isActive = status === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => handleMoveStatus(option)}
+                      aria-pressed={isActive}
+                      className={[
+                        "px-4 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide transition",
+                        isActive
+                          ? "bg-white text-[#0B1220]"
+                          : "text-slate-300 hover:text-white",
+                      ].join(" ")}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {status !== "DONE" ? (
+                <button
+                  type="button"
+                  className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={handleMarkDone}
+                >
+                  Mark done
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={!initialTask?.id || !onDelete}
+                className="rounded-xl border border-red-400/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-red-300 transition hover:border-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 transition hover:bg-white/10 sm:w-auto"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-indigo-500/30 transition hover:opacity-90 sm:w-auto"
+              disabled={saveDisabled}
+            >
+              Save
+            </button>
+          </div>
         </div>
       </form>
     </div>

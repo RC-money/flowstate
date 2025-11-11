@@ -32,7 +32,9 @@ const KEY_ALIASES: Record<string, string> = {
   del: "delete",
 };
 
-const modifierMap: Record<string, keyof ParsedCombo> = {
+type ModifierKey = Exclude<keyof ParsedCombo, "key">;
+
+const modifierMap: Record<string, ModifierKey> = {
   shift: "shift",
   alt: "alt",
   option: "alt",
@@ -116,7 +118,11 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
 
 const normalizeHotkeys = (hotkeys: HotkeyConfig[] = []): NormalizedHotkey[] =>
   hotkeys
-    .filter((binding): binding is HotkeyConfig => Boolean(binding?.handler && binding.combo))
+    .filter(
+      (binding): binding is HotkeyConfig =>
+        typeof binding?.handler === "function" &&
+        Boolean(binding.combo)
+    )
     .map((binding) => {
       const combos = (Array.isArray(binding.combo) ? binding.combo : [binding.combo])
         .map(parseCombo)

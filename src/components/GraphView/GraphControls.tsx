@@ -1,10 +1,14 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
+import type { GraphPreferences } from "./GraphView";
 
 type ClusterMode = "none" | "column" | "tag";
 
-export interface GraphControlPrefs {
-  clusterMode: ClusterMode;
-  showTemporal: boolean;
+type GraphPreset = "planning" | "focus";
+
+export interface GraphControlPrefs extends GraphPreferences {
+  preset?: GraphPreset;
+  cohesion?: number;
+  spacing?: number;
 }
 
 interface GraphControlsProps {
@@ -15,7 +19,8 @@ interface GraphControlsProps {
   onStrongForceChange(value: number): void;
   onChargeForceChange(value: number): void;
   onReset(): void;
-  onToggleFreeze(): void;
+  onFreezeToggle?(): void;
+  onToggleFreeze?(): void;
   isFrozen?: boolean;
 }
 
@@ -33,10 +38,43 @@ const GraphControls: React.FC<GraphControlsProps> = ({
   onStrongForceChange,
   onChargeForceChange,
   onReset,
+  onFreezeToggle,
   onToggleFreeze,
   isFrozen = false,
 }) => {
-  const { clusterMode = "none", showTemporal = false } = prefs ?? {};
+  const {
+    clusterMode = "none",
+    showTemporal = false,
+    showLabels = false,
+    autoLock = true,
+  } = prefs ?? {};
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const presetOptions = useMemo(
+    () => [
+      { key: "planning" as GraphPreset, label: "Planning", cohesion: 70, spacing: 90 },
+      { key: "focus" as GraphPreset, label: "Focus", cohesion: 40, spacing: 140 },
+    ],
+    []
+  );
+  const activePreset =
+    prefs?.preset ??
+    presetOptions.find(
+      (option) => strongForce === -option.cohesion && chargeForce === -option.spacing
+    )?.key;
+  const freezeToggleHandler = useMemo(
+    () => onFreezeToggle ?? onToggleFreeze ?? (() => {}),
+    [onFreezeToggle, onToggleFreeze]
+  );
+
+  const handlePresetSelect = (option: (typeof presetOptions)[number]) => {
+    onStrongForceChange(-option.cohesion);
+    onChargeForceChange(-option.spacing);
+    onChange({
+      preset: option.key,
+      cohesion: option.cohesion,
+      spacing: option.spacing,
+    });
+  };
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-100">
@@ -90,43 +128,111 @@ const GraphControls: React.FC<GraphControlsProps> = ({
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          {
-            label: "Strong Force",
-            value: strongForce,
-            min: -120,
-            max: -20,
-            step: 5,
-            onChange: onStrongForceChange,
-          },
-          {
-            label: "Charge Force",
-            value: chargeForce,
-            min: -140,
-            max: -10,
-            step: 5,
-            onChange: onChargeForceChange,
-          },
-        ].map((control) => (
-          <label
-            key={control.label}
-            className="flex flex-col gap-2 rounded-xl border border-white/10 bg-[#0F172A]/40 p-3 text-xs font-semibold uppercase tracking-wide text-slate-300"
-          >
-            {control.label}
-            <input
-              type="range"
-              min={control.min}
-              max={control.max}
-              step={control.step}
-              value={control.value}
-              onChange={(event) => control.onChange(Number(event.currentTarget.value))}
-              className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-white"
-            />
-            <span className="text-right text-[10px] text-slate-400">{control.value}</span>
-          </label>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+          Show Labels
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange({ showLabels: !showLabels })}
+          aria-pressed={showLabels}
+          className={[
+            "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition",
+            showLabels
+              ? "border-white/40 bg-white/20 text-white"
+              : "border-white/10 text-slate-300 hover:border-white/30 hover:text-white",
+          ].join(" ")}
+        >
+          {showLabels ? "On" : "Off"}
+        </button>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+          Presets
+        </span>
+        <div className="inline-flex rounded-xl bg-white/5 p-1" role="group" aria-label="Layout presets">
+          {presetOptions.map((preset) => {
+            const isActive = activePreset === preset.key;
+            return (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => handlePresetSelect(preset)}
+                aria-pressed={isActive}
+                className={[
+                  "px-4 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide transition",
+                  isActive ? "bg-white text-[#0B1220]" : "text-slate-300 hover:text-white",
+                ].join(" ")}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <details
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+        className="rounded-2xl border border-white/10 bg-[#0F172A]/40 p-4"
+      >
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-300">
+          Advanced
+        </summary>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {[
+            {
+              label: "Layout cohesion",
+              value: strongForce,
+              min: -120,
+              max: -20,
+              step: 5,
+              onChange: onStrongForceChange,
+            },
+            {
+              label: "Node spacing",
+              value: chargeForce,
+              min: -140,
+              max: -10,
+              step: 5,
+              onChange: onChargeForceChange,
+            },
+          ].map((control) => (
+            <label
+              key={control.label}
+              className="flex flex-col gap-2 rounded-xl border border-white/10 bg-[#0F172A]/60 p-3 text-xs font-semibold uppercase tracking-wide text-slate-300"
+            >
+              {control.label}
+              <input
+                type="range"
+                min={control.min}
+                max={control.max}
+                step={control.step}
+                value={control.value}
+                onChange={(event) => control.onChange(Number(event.currentTarget.value))}
+                className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-white"
+              />
+              <span className="text-right text-[10px] text-slate-400">{control.value}</span>
+            </label>
+          ))}
+        </div>
+        <label className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-[#0F172A]/60 p-3">
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Auto-lock layout
+            </span>
+            <span className="text-[11px] text-slate-400">Freeze nodes after short idle</span>
+          </div>
+          <input
+            type="checkbox"
+            checked={autoLock}
+            onChange={() => onChange({ autoLock: !autoLock })}
+            className="h-5 w-5 cursor-pointer rounded border border-white/30 bg-transparent accent-white"
+            aria-label="Toggle auto-lock layout"
+          />
+        </label>
+      </details>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         <button
@@ -138,10 +244,10 @@ const GraphControls: React.FC<GraphControlsProps> = ({
         </button>
         <button
           type="button"
-          onClick={onToggleFreeze}
+          onClick={freezeToggleHandler}
           className="rounded-xl border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10"
         >
-          {isFrozen ? "Unfreeze" : "Freeze"}
+          {isFrozen ? "Unlock Layout" : "Lock Layout"}
         </button>
       </div>
     </div>

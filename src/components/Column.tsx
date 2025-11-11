@@ -9,9 +9,21 @@ type Props = {
   cards: Task[];
   onCardClick: (t: Task) => void;
   onAdd?: (status: Status) => void;
+  openTask?: (taskId: string) => void;
+  moveTask?: (taskId: string, next: Status) => void;
+  deleteTask?: (taskId: string) => void;
 };
 
-export default function Column({ id, title, cards, onCardClick, onAdd }: Props) {
+export default function Column({
+  id,
+  title,
+  cards,
+  onCardClick,
+  onAdd,
+  openTask,
+  moveTask,
+  deleteTask,
+}: Props) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
@@ -78,14 +90,20 @@ export default function Column({ id, title, cards, onCardClick, onAdd }: Props) 
 
       <div className="space-y-4">
         {cards.map((t) => (
-          <button
+          <Card
             key={t.id}
-            type="button"
-            onClick={() => onCardClick(t)}
-            className="w-full text-left"
-          >
-            <Card id={t.id} title={t.title} status={t.status} />
-          </button>
+            id={t.id}
+            title={t.title}
+            status={t.status}
+            onClick={() => {
+              onCardClick(t);
+              openTask?.(t.id);
+            }}
+            onEdit={() => openTask?.(t.id)}
+            onMarkDone={() => moveTask?.(t.id, "DONE")}
+            onDelete={() => deleteTask?.(t.id)}
+            onMove={(next) => moveTask?.(t.id, next)}
+          />
         ))}
       </div>
     </section>

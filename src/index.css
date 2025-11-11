@@ -6,7 +6,19 @@
 .bg-glass { backdrop-filter: blur(16px); background-color: rgba(21,29,46,0.65); }
 
 :root { color-scheme: dark; }
-html, body, #root { height: 100%; }
+html,
+body {
+  height: auto;
+  min-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: auto;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 /* Subtle panel surface */
 .panel {
   background: linear-gradient(180deg, #121827 0%, #0F1626 100%); /* theme.panel/panel2 */
