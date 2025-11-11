@@ -25,7 +25,7 @@ export default function Column({ id, title, cards, onCardClick }: Props) {
       ref={setNodeRef}
       className={[
         "w-full",
-        "rounded-2xl border border-white/10 bg-white/5",
+        "rounded-2xl border border-white/10 bg-transparent",
         "p-5 transition-colors",
         isOver ? "bg-white/8" : "",
       ].join(" ")}
