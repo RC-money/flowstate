@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,6 +13,7 @@ import {
 import Board from "./components/Board";
 import Card from "./components/Card";
 import TaskModal from "./components/TaskModal";
+import GraphView from "./components/GraphView/GraphView";
 import { useHotkeys } from "./hooks/useHotkeys";
 
 // Types exported for Column/Board typing
@@ -23,6 +24,8 @@ export type Task = {
   status: Status;
   description?: string;
 };
+
+type ViewMode = "board" | "graph";
 
 function createBlankTask(status: Status): Task {
   return {
@@ -49,6 +52,11 @@ export default function App() {
   const [modalMode, setModalMode] = useState<"new" | "edit">("new");
   const [draftTask, setDraftTask] = useState<Task | null>(null);
   const [focusedColumn, setFocusedColumn] = useState<Status | null>(null);
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "board";
+    const stored = window.sessionStorage.getItem("flowstate:view");
+    return stored === "graph" ? "graph" : "board";
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -86,6 +94,11 @@ export default function App() {
 
   const handleCardClick = (task: Task) => {
     handleEditTask(task);
+  };
+
+  const handleOpenTaskById = (taskId: string) => {
+    const nextTask = tasksById[taskId];
+    if (nextTask) handleEditTask(nextTask);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -130,6 +143,15 @@ export default function App() {
     closeModal();
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem("flowstate:view", view);
+  }, [view]);
+
+  const handleViewChange = (nextView: ViewMode) => {
+    setView(nextView);
+  };
+
   useHotkeys([
     {
       combo: "n",
@@ -155,36 +177,67 @@ export default function App() {
       <div className="max-w-6xl mx-auto px-6 py-12">
         <h1 className="text-center text-4xl font-extrabold tracking-wide">FLOWSTATE</h1>
         <p className="text-center mt-3 text-[#8aa0b8]">Your tasks, in motion.</p>
+        <div className="mt-8 flex justify-center">
+          <div
+            role="group"
+            aria-label="Select view"
+            className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm"
+          >
+            {(["board", "graph"] as const).map((mode) => {
+              const isActive = view === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => handleViewChange(mode)}
+                  className={`px-5 py-2 text-sm font-semibold uppercase tracking-wide rounded-xl transition ${
+                    isActive
+                      ? "bg-white text-[#0B1220]"
+                      : "text-[#8aa0b8] hover:text-white"
+                  }`}
+                >
+                  {mode === "board" ? "Board" : "Graph"}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="board-wrapper mt-10">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            {/* The three droppable columns are inside Board */}
-            <Board
-              {...({
-                tasks,
-                onCardClick: handleCardClick,
-                onAdd: handleAddTask,
-              } as any)}
-            />
-
-            {/* Floating card while dragging for smooth visuals */}
-            <DragOverlay
-              dropAnimation={{ duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }}
+          {view === "board" ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCorners}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
             >
-              {activeId ? (
-                <Card
-                  id={activeId}
-                  title={tasksById[activeId]?.title ?? ""}
-                  status={tasksById[activeId]?.status ?? "TO-DO"}
-                />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
+              {/* The three droppable columns are inside Board */}
+              <Board
+                {...({
+                  view,
+                  tasks,
+                  onCardClick: handleCardClick,
+                  onAdd: handleAddTask,
+                } as any)}
+              />
+
+              {/* Floating card while dragging for smooth visuals */}
+              <DragOverlay
+                dropAnimation={{ duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }}
+              >
+                {activeId ? (
+                  <Card
+                    id={activeId}
+                    title={tasksById[activeId]?.title ?? ""}
+                    status={tasksById[activeId]?.status ?? "TO-DO"}
+                  />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} />
+          )}
         </div>
       </div>
       {isModalOpen ? (
