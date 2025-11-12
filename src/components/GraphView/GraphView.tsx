@@ -26,11 +26,21 @@ import {
   legendSwatches,
 } from "./graphStyles";
 import GraphControls from "./GraphControls";
+import Starfield from "./Starfield";
 import { logEvent } from "../../lib/analytics";
+
+type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
+type EnhancedStarfieldProps = BaseStarfieldProps & {
+  event?: StarfieldEventType | null;
+  nodePositions?: NodePosition[];
+};
+const EnhancedStarfield = Starfield as React.ComponentType<EnhancedStarfieldProps>;
 
 type ClusterMode = "none" | "column" | "tag";
 type GraphPreset = "planning" | "focus";
-
+type LegendKey = (typeof legendSwatches)[number]["label"];
+const LEGEND_KEYS = legendSwatches.map((swatch) => swatch.label) as LegendKey[];
+const LEGEND_KEY_SET = new Set<LegendKey>(LEGEND_KEYS);
 type Debounced<T extends (...args: any[]) => void> = ((...args: Parameters<T>) => void) & {
   cancel: () => void;
 };
@@ -59,11 +69,13 @@ export interface GraphPreferences {
   showTemporal?: boolean;
   showLabels?: boolean;
   labelMode?: "hover" | "always";
+  showStarfield?: boolean;
   autoLock?: boolean;
   locked?: boolean;
   preset?: GraphPreset;
   cohesion?: number;
   spacing?: number;
+  legendKeys?: LegendKey[];
 }
 
 interface GraphViewProps {
@@ -85,16 +97,43 @@ const COLUMN_TARGETS: Record<"todo" | "inprogress" | "done", { x: number; y: num
 const TAG_CLUSTER_RADIUS = 260;
 const MAX_TAG_CLUSTERS = 5;
 const AUTO_LOCK_DELAY = 2500;
+const GRAPH_BACKGROUND_TINTS: Record<
+  keyof typeof COLUMN_TARGETS,
+  { r: number; g: number; b: number; a: number }
+> = {
+  todo: { r: 0, g: 191, b: 255, a: 0.05 },
+  inprogress: { r: 93, g: 63, b: 211, a: 0.06 },
+  done: { r: 16, g: 185, b: 129, a: 0.06 },
+};
+const GRAPH_BACKGROUND_TRANSITION = "background-color 3000ms ease";
 const DEFAULT_GRAPH_PREFS: GraphPreferences = {
   clusterMode: "column",
   showTemporal: false,
   showLabels: false,
   labelMode: "hover",
+  showStarfield: true,
   autoLock: true,
   locked: true,
   preset: "planning",
   cohesion: DEFAULT_COHESION,
   spacing: DEFAULT_SPACING,
+};
+
+let driftStarsInjected = false;
+const ensureDriftStars = () => {
+  if (driftStarsInjected || typeof document === "undefined") {
+    return;
+  }
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes driftStars {
+      0% { transform: translate3d(0, 0, 0); }
+      50% { transform: translate3d(-80px, -50px, 0); }
+      100% { transform: translate3d(0, 0, 0); }
+    }
+  `;
+  document.head.appendChild(style);
+  driftStarsInjected = true;
 };
 
 const normalizeStatusKey = (status?: string): keyof typeof COLUMN_TARGETS => {
@@ -103,6 +142,70 @@ const normalizeStatusKey = (status?: string): keyof typeof COLUMN_TARGETS => {
   if (normalized === "inprogress") return "inprogress";
   if (normalized === "done") return "done";
   return "todo";
+};
+
+const statusLegendMap: Record<string, LegendKey | undefined> = {
+  "TO-DO": "To-Do",
+  "IN PROGRESS": "In Progress",
+  DONE: "Done",
+};
+
+const linkLegendMap: Record<GraphLink["kind"], LegendKey> = {
+  dependency: "Dependency",
+  temporal: "Temporal",
+};
+
+const isLegendKey = (value: unknown): value is LegendKey =>
+  typeof value === "string" && LEGEND_KEY_SET.has(value as LegendKey);
+
+const sanitizeLegendKeys = (value: unknown): LegendKey[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const keys = value.filter(isLegendKey) as LegendKey[];
+  if (!keys.length) return undefined;
+  return Array.from(new Set(keys));
+};
+
+type NodePosition = { x: number; y: number };
+type StarfieldEventType = "add" | "move" | "complete";
+const STARFIELD_TASK_EVENT = "flowstate:task-event";
+const KEYBOARD_EDITABLE_SELECTOR = "input, textarea, [contenteditable=\"true\"]";
+
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!target || typeof window === "undefined") {
+    return false;
+  }
+  const maybeElement = target as Element;
+  return Boolean(maybeElement?.closest?.(KEYBOARD_EDITABLE_SELECTOR));
+};
+
+const positionsAreEqual = (a: NodePosition[], b: NodePosition[]): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i += 1) {
+    if (Math.abs(a[i].x - b[i].x) > 0.5 || Math.abs(a[i].y - b[i].y) > 0.5) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const getNodeLegendKeys = (node: GraphNode): LegendKey[] => {
+  const keys: LegendKey[] = [];
+  const normalizedStatus = typeof node.status === "string" ? node.status.toUpperCase() : "";
+  const statusKey = statusLegendMap[normalizedStatus];
+  if (statusKey) {
+    keys.push(statusKey);
+  }
+  if (node.blocked) {
+    keys.push("Blocked");
+  }
+  return keys;
+};
+
+const getLinkLegendKey = (link: GraphLink | LinkObject): LegendKey | null => {
+  const key = linkLegendMap[(link as GraphLink).kind];
+  return key ?? null;
 };
 
 const resolveNodeId = (node: GraphNode | string | number): string => {
@@ -127,10 +230,16 @@ const loadStoredPrefs = (): GraphPreferences => {
     const raw = window.localStorage.getItem(PREFS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return {
-        ...DEFAULT_GRAPH_PREFS,
-        ...(parsed && typeof parsed === "object" ? parsed : {}),
-      };
+      if (parsed && typeof parsed === "object") {
+        const candidate = parsed as Partial<GraphPreferences> & { legendKeys?: unknown };
+        const sanitizedLegendKeys = sanitizeLegendKeys(candidate.legendKeys);
+        const { legendKeys: _ignored, ...rest } = candidate;
+        return {
+          ...DEFAULT_GRAPH_PREFS,
+          ...(rest as GraphPreferences),
+          ...(sanitizedLegendKeys ? { legendKeys: sanitizedLegendKeys } : {}),
+        };
+      }
     }
   } catch {
     // ignore hydration failures
@@ -144,6 +253,11 @@ type ForceGraphInstance = ForceGraphMethods<GraphNode, GraphLink> & {
   resumeAnimation?: () => void;
   graph2ScreenCoords?: (x: number, y: number) => { x: number; y: number };
   zoom?: (scale?: number, ms?: number) => number;
+  cameraPosition?: (
+    position?: { x?: number; y?: number; z?: number },
+    lookAt?: { x: number; y: number; z: number },
+    transitionMs?: number
+  ) => ForceGraphInstance | { x: number; y: number; z: number };
 };
 
 type DistanceForce = { distance?: (value: number) => void };
@@ -155,19 +269,158 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
   const [strongForce, setStrongForce] = useState<number>(DEFAULT_STRONG);
   const [chargeForce, setChargeForce] = useState<number>(DEFAULT_CHARGE);
   const [graphPrefs, setGraphPrefs] = useState<GraphPreferences>(() => loadStoredPrefs());
+  const [activeLegendKeys, setActiveLegendKeys] = useState<Set<LegendKey>>(
+    () => new Set<LegendKey>(graphPrefs.legendKeys && graphPrefs.legendKeys.length ? graphPrefs.legendKeys : LEGEND_KEYS)
+  );
   const isLocked = Boolean(graphPrefs.locked);
 
   const graphData: GraphData = useMemo(
     () => buildGraphData(tasks, graphPrefs),
     [tasks, graphPrefs]
   );
+  const [nodePositions, setNodePositions] = useState<NodePosition[]>([]);
   const autoLockTimer = useRef<number | null>(null);
   const prevForceValues = useRef({ strong: strongForce, charge: chargeForce });
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [scrollZoomEnabled, setScrollZoomEnabled] = useState<boolean>(false);
+  const [scrollZoomEnabled, setScrollZoomEnabled] = useState<boolean>(
+    () => graphData.nodes.length < 100
+  );
+  const showStarfield = graphPrefs.showStarfield ?? true;
+  const nodePositionsRef = useRef<NodePosition[]>([]);
+  const [starfieldEvent, setStarfieldEvent] = useState<StarfieldEventType | null>(null);
+  const starfieldEventResetRef = useRef<number | null>(null);
+  const filtersDirty = activeLegendKeys.size !== LEGEND_KEYS.length;
+  const legendStatusMessage = `Showing: ${activeLegendKeys.size} of ${LEGEND_KEYS.length}`;
+  const isLegendKeyActive = useCallback(
+    (key: LegendKey | null | undefined) => {
+      if (!key) return true;
+      return activeLegendKeys.has(key);
+    },
+    [activeLegendKeys]
+  );
+  const toggleLegendKey = useCallback((key: LegendKey) => {
+    setActiveLegendKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+  const resetLegendFilters = useCallback(() => {
+    setActiveLegendKeys(new Set(LEGEND_KEYS));
+  }, []);
+  const isNodeVisible = useCallback(
+    (node: GraphNode | null | undefined) => {
+      if (!node) return false;
+      const keys = getNodeLegendKeys(node);
+      if (!keys.length) return true;
+      return keys.every((key) => isLegendKeyActive(key));
+    },
+    [isLegendKeyActive]
+  );
+  const isLinkVisible = useCallback(
+    (link: GraphLink | LinkObject) => isLegendKeyActive(getLinkLegendKey(link)),
+    [isLegendKeyActive]
+  );
+  const graphBackgroundColor = useMemo(() => {
+    if (!tasks.length) {
+      return null;
+    }
+    const counts: Record<keyof typeof COLUMN_TARGETS, number> = {
+      todo: 0,
+      inprogress: 0,
+      done: 0,
+    };
+    tasks.forEach((task) => {
+      const key = normalizeStatusKey(task.status);
+      counts[key] += 1;
+    });
+    const total = counts.todo + counts.inprogress + counts.done;
+    if (!total) {
+      return null;
+    }
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let a = 0;
+    (Object.keys(GRAPH_BACKGROUND_TINTS) as Array<keyof typeof GRAPH_BACKGROUND_TINTS>).forEach(
+      (key) => {
+        const weight = counts[key] / total;
+        r += GRAPH_BACKGROUND_TINTS[key].r * weight;
+        g += GRAPH_BACKGROUND_TINTS[key].g * weight;
+        b += GRAPH_BACKGROUND_TINTS[key].b * weight;
+        a += GRAPH_BACKGROUND_TINTS[key].a * weight;
+      }
+    );
+    return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${Number(a.toFixed(3))})`;
+  }, [tasks]);
+  const graphBackgroundStyle = graphBackgroundColor
+    ? { backgroundColor: graphBackgroundColor, transition: GRAPH_BACKGROUND_TRANSITION }
+    : undefined;
+  const updateNodePositions = useCallback(
+    (nextPositions: NodePosition[]) => {
+      if (positionsAreEqual(nodePositionsRef.current, nextPositions)) {
+        return;
+      }
+      nodePositionsRef.current = nextPositions;
+      setNodePositions(nextPositions);
+    },
+    []
+  );
+  const emitStarfieldEvent = useCallback((type: StarfieldEventType) => {
+    if (typeof window === "undefined") {
+      setStarfieldEvent(type);
+      return;
+    }
+    if (starfieldEventResetRef.current !== null) {
+      cancelAnimationFrame(starfieldEventResetRef.current);
+      starfieldEventResetRef.current = null;
+    }
+    setStarfieldEvent(type);
+    starfieldEventResetRef.current = window.requestAnimationFrame(() => {
+      setStarfieldEvent(null);
+      starfieldEventResetRef.current = null;
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+      if (starfieldEventResetRef.current !== null) {
+        cancelAnimationFrame(starfieldEventResetRef.current);
+        starfieldEventResetRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: StarfieldEventType | null }>).detail;
+      if (!detail?.type) return;
+      emitStarfieldEvent(detail.type);
+    };
+    window.addEventListener(STARFIELD_TASK_EVENT, handler as EventListener);
+    return () => window.removeEventListener(STARFIELD_TASK_EVENT, handler as EventListener);
+  }, [emitStarfieldEvent]);
   const rafRef = useRef<number | undefined>(undefined);
+  const scrollZoomOverrideRef = useRef(false);
+  const graphViewportRef = useRef<HTMLDivElement | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia === "undefined") {
+      return false;
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
   const debouncedSetHover = useMemo(
     () => debounce((node: GraphNode | null) => setHoverNode(node), 75),
     []
@@ -217,11 +470,28 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     scheduleAutoLock();
   }, [scheduleAutoLock]);
 
+  const frameGraphToNodes = useCallback(
+    (transition = 400, padding = 50) => {
+      const fg = fgRef.current;
+      if (!fg || graphData.nodes.length === 0) {
+        return;
+      }
+      fg.zoomToFit?.(transition, padding);
+      const measuredZoom = fg.zoom?.();
+      const safeZoom = typeof measuredZoom === "number" ? measuredZoom : 1;
+      const targetZoom = Math.max(0.6, Math.min(2.2, safeZoom));
+      if (typeof fg.cameraPosition === "function") {
+        fg.cameraPosition({ z: targetZoom }, undefined, transition);
+      }
+      setZoomLevel(Number(targetZoom.toFixed(2)));
+    },
+    [graphData.nodes.length]
+  );
+
   const resetLayout = useCallback(() => {
     clearHover();
-    fgRef.current?.zoomToFit?.(400);
-    fgRef.current?.centerAt?.(0, 0, 400);
-  }, [clearHover]);
+    frameGraphToNodes(400);
+  }, [clearHover, frameGraphToNodes]);
 
   const tagClusters = useMemo(() => {
     const counts = new Map<string, number>();
@@ -299,17 +569,21 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
 
   const handleNodeClick = useCallback(
     (node: GraphNode) => {
-      if (typeof node?.id !== "string") return;
+      if (!isNodeVisible(node) || typeof node?.id !== "string") return;
       onOpenTask(node.id);
     },
-    [onOpenTask]
+    [isNodeVisible, onOpenTask]
   );
 
   const handleNodeHover = useCallback(
     (node: GraphNode | null) => {
+      if (node && !isNodeVisible(node)) {
+        debouncedSetHover(null);
+        return;
+      }
       debouncedSetHover(node ?? null);
     },
-    [debouncedSetHover]
+    [debouncedSetHover, isNodeVisible]
   );
 
   const handleStrongForceChange = useCallback(
@@ -401,12 +675,22 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
   }, [isLocked, lockLayout, unlockLayout]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "r") {
+      if (event.code === "KeyR") {
+        if (event.metaKey || event.ctrlKey || isEditableTarget(event.target)) {
+          return;
+        }
         event.preventDefault();
         resetLayout();
+        return;
       }
       if (event.key.toLowerCase() === "f") {
+        if (isEditableTarget(event.target)) {
+          return;
+        }
         event.preventDefault();
         toggleFreeze();
       }
@@ -498,12 +782,14 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        PREFS_STORAGE_KEY,
-        JSON.stringify(graphPrefs)
-      );
+      const persistedLegendKeys = LEGEND_KEYS.filter((key) => activeLegendKeys.has(key));
+      const payload: GraphPreferences = {
+        ...graphPrefs,
+        legendKeys: persistedLegendKeys,
+      };
+      window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(payload));
     }
-  }, [graphPrefs]);
+  }, [graphPrefs, activeLegendKeys]);
 
   useEffect(() => {
     if (graphPrefs.autoLock && !graphPrefs.locked) {
@@ -555,6 +841,10 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
         typeof prefs?.spacing === "number"
           ? prefs.spacing
           : prev.spacing ?? DEFAULT_SPACING,
+      showStarfield:
+        typeof prefs?.showStarfield === "boolean"
+          ? prefs.showStarfield
+          : prev.showStarfield ?? true,
     }));
   }, [
     prefs?.clusterMode,
@@ -566,6 +856,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     prefs?.preset,
     prefs?.cohesion,
     prefs?.spacing,
+    prefs?.showStarfield,
   ]);
 
   const handlePrefsChange = (partial: Partial<GraphPreferences>) => {
@@ -611,10 +902,51 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
   };
 
   useEffect(() => {
+    ensureDriftStars();
+  }, []);
+
+  useEffect(() => {
     const fg = fgRef.current;
     if (!fg?.zoom) return;
     setZoomLevel(Number(fg.zoom().toFixed(2)));
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia === "undefined") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+    };
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange);
+    }
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!graphData.nodes.length) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      frameGraphToNodes(400);
+    }, 200);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [graphData.nodes.length, frameGraphToNodes]);
 
   useEffect(() => {
     if (!hoveredGraphNode) {
@@ -623,9 +955,51 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     }
     const fg = fgRef.current;
     if (!fg?.graph2ScreenCoords) return;
-    const coords = fg.graph2ScreenCoords(hoveredGraphNode.x ?? 0, hoveredGraphNode.y ?? 0);
+    const typed = hoveredGraphNode as GraphNode & { x?: number; y?: number };
+    const coords = fg.graph2ScreenCoords(typed.x ?? 0, typed.y ?? 0);
     setTooltipPosition(coords);
   }, [hoveredGraphNode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    let frame = 0;
+    const samplePositions = () => {
+      const fg = fgRef.current;
+      const viewport = graphViewportRef.current;
+      if (fg?.graph2ScreenCoords && viewport) {
+        const rect = viewport.getBoundingClientRect();
+        const next: NodePosition[] = [];
+        graphData.nodes.forEach((node) => {
+          const typed = node as GraphNode & { x?: number; y?: number };
+          if (
+            !isNodeVisible(typed) ||
+            typeof typed.x !== "number" ||
+            typeof typed.y !== "number"
+          ) {
+            return;
+          }
+          const coords = fg.graph2ScreenCoords?.(typed.x, typed.y);
+          if (!coords) return;
+          next.push({
+            x: coords.x - rect.left,
+            y: coords.y - rect.top,
+          });
+        });
+        updateNodePositions(next);
+      } else {
+        updateNodePositions([]);
+      }
+      frame = window.requestAnimationFrame(samplePositions);
+    };
+    frame = window.requestAnimationFrame(samplePositions);
+    return () => {
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, [graphData.nodes, isNodeVisible, updateNodePositions]);
 
   const handleZoomSliderChange = useCallback((value: number) => {
     const next = Math.min(2.4, Math.max(0.5, value));
@@ -634,8 +1008,17 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
   }, []);
 
   const toggleScrollZoom = useCallback(() => {
+    scrollZoomOverrideRef.current = true;
     setScrollZoomEnabled((prev) => !prev);
   }, []);
+
+  useEffect(() => {
+    if (scrollZoomOverrideRef.current) {
+      return;
+    }
+    const shouldEnableScrollZoom = graphData.nodes.length < 100;
+    setScrollZoomEnabled((prev) => (prev === shouldEnableScrollZoom ? prev : shouldEnableScrollZoom));
+  }, [graphData.nodes.length]);
 
   const tooltipCoords = useMemo(() => {
     const baseX = tooltipPosition?.x ?? cursor.x;
@@ -666,121 +1049,135 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     [scrollZoomEnabled]
   );
 
+  const handleStarfieldToggle = useCallback(() => {
+    setGraphPrefs((prev) => {
+      const next = !(prev.showStarfield ?? true);
+      return { ...prev, showStarfield: next };
+    });
+  }, []);
+
   return (
-    <section className="flex min-h-screen flex-col gap-6 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-      <div className="relative space-y-6 pb-4">
-        <div className="sticky top-16 z-30 w-full px-4">
-          <div className="mx-auto max-w-screen-xl">
-            <div className="rounded-2xl border border-white/10 bg-[#0B1220]/85 px-6 py-5 shadow-xl shadow-black/40 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
-              <GraphControls
-                strongForce={strongForce}
-                chargeForce={chargeForce}
-                isFrozen={isLocked}
-                onStrongForceChange={handleStrongForceChange}
-                onChargeForceChange={handleChargeForceChange}
-                onReset={resetLayout}
-                onToggleFreeze={toggleFreeze}
-                prefs={{
-                  clusterMode: graphPrefs.clusterMode ?? "none",
-                  showTemporal: Boolean(graphPrefs.showTemporal),
-                  showLabels: Boolean(graphPrefs.showLabels),
-                  autoLock: graphPrefs.autoLock ?? true,
-                  preset: graphPrefs.preset,
-                  cohesion: graphPrefs.cohesion ?? Math.abs(strongForce),
-                  spacing: graphPrefs.spacing ?? Math.abs(chargeForce),
-                }}
-                onChange={handlePrefsChange}
-              />
-              <p className="mt-3 text-[11px] text-slate-400">
-                Tip: drag to pan, zoom with the slider or toggle scroll below,{" "}
-                <kbd className="rounded bg-white/10 px-1">F</kbd> lock/unlock,{" "}
-                <kbd className="rounded bg-white/10 px-1">R</kbd> reset. Switch “Cluster” to see
-                status or tag groupings.
+    <section className="min-h-screen space-y-8 px-4 py-8">
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="relative mb-8 h-48 overflow-hidden rounded-3xl border border-white/10 bg-[#050B18] shadow-lg shadow-black/40">
+          <Starfield className="z-0" enabled={Boolean(graphPrefs.showStarfield)} zoom={zoomLevel} />
+          <div className="relative z-10 flex h-full items-center justify-between px-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Diagnostics
+              </p>
+              <p className="text-base font-semibold text-white">Live Starfield Preview</p>
+              <p className="text-[11px] text-slate-300">
+                If you see particles drifting here, the cosmic layer is healthy.
               </p>
             </div>
+            <span className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-200">
+              {graphPrefs.showStarfield ? "Enabled" : "Disabled"}
+            </span>
           </div>
         </div>
-        <div className="relative mx-auto max-w-screen-xl px-4">
+      </div>
+      <div className="sticky top-6 z-30 w-full">
+        <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/85 px-6 py-5 shadow-xl shadow-black/40 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
+          <div className="[&_div.flex.flex-wrap.items-center.justify-end.gap-3]:hidden">
+            <GraphControls
+              strongForce={strongForce}
+              chargeForce={chargeForce}
+              isFrozen={isLocked}
+              onStrongForceChange={handleStrongForceChange}
+              onChargeForceChange={handleChargeForceChange}
+              onReset={resetLayout}
+              onToggleFreeze={toggleFreeze}
+              prefs={{
+                clusterMode: graphPrefs.clusterMode ?? "none",
+                showTemporal: Boolean(graphPrefs.showTemporal),
+                showLabels: Boolean(graphPrefs.showLabels),
+                autoLock: graphPrefs.autoLock ?? true,
+                preset: graphPrefs.preset,
+                cohesion: graphPrefs.cohesion ?? Math.abs(strongForce),
+                spacing: graphPrefs.spacing ?? Math.abs(chargeForce),
+              }}
+              onChange={handlePrefsChange}
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={resetLayout}
+              className="rounded-xl border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10"
+            >
+              Reset Layout
+            </button>
+            <button
+              type="button"
+              onClick={toggleFreeze}
+              className="rounded-xl border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10"
+            >
+              {isLocked ? "Unlock Layout" : "Lock Layout"}
+            </button>
+            <button
+              type="button"
+              onClick={handleStarfieldToggle}
+              aria-pressed={showStarfield}
+              className={[
+                "rounded-xl border px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
+                showStarfield
+                  ? "border-white/40 bg-white/15 text-white"
+                  : "border-white/20 text-slate-200 hover:border-white/40 hover:text-white",
+              ].join(" ")}
+            >
+              Toggle Starfield
+            </button>
+          </div>
+          <p className="mt-3 text-[11px] text-slate-400">
+            Tip: drag to pan, zoom with the slider or toggle scroll below,{" "}
+            <kbd className="rounded bg-white/10 px-1">F</kbd> lock/unlock,{" "}
+            <kbd className="rounded bg-white/10 px-1">R</kbd> reset. Switch “Cluster” to see status
+            or tag groupings.
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="relative h-screen w-full overflow-hidden"
+        style={graphBackgroundStyle}
+      >
+        <div className="absolute inset-0 z-10 mx-auto flex h-full w-full max-w-7xl flex-col justify-center px-4">
           <div
-            className="relative h-[640px] w-full overflow-hidden rounded-2xl bg-[#050B18]"
+            ref={graphViewportRef}
+            className="relative h-[640px] w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl shadow-black/40"
             onMouseMove={handleCanvasMouseMove}
             onMouseLeave={handleCanvasMouseLeave}
             onWheelCapture={handleWheelScroll}
           >
-            <div className="pointer-events-none absolute inset-0 z-20 flex flex-wrap items-end justify-between gap-3 px-4 pb-4">
-              <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#0B1220]/85 px-3 py-2 text-[11px] text-slate-200 shadow-lg">
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Legend
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {legendSwatches.map((swatch) => (
-                    <div
-                      key={swatch.label}
-                      className="flex items-center gap-2 rounded-xl bg-white/5 px-2 py-1"
-                    >
-                      {swatch.kind === "node" ? (
-                        <span
-                          className="inline-block h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: swatch.color }}
-                        />
-                      ) : (
-                        <span
-                          className="inline-block h-[2px] w-6"
-                          style={{
-                            background: swatch.color,
-                            borderBottom: swatch.dashed
-                              ? "1px dashed rgba(226,232,240,0.6)"
-                              : "none",
-                          }}
-                        />
-                      )}
-                      <span className="text-slate-100">{swatch.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#0B1220]/85 px-3 py-3 text-[11px] text-slate-200 shadow-lg">
-                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  <span>Zoom</span>
-                  <span>{Math.round(zoomLevel * 100)}%</span>
-                </div>
-                <label className="sr-only" htmlFor="graph-zoom-slider">
-                  Graph zoom
-                </label>
-                <input
-                  id="graph-zoom-slider"
-                  type="range"
-                  min={0.5}
-                  max={2.4}
-                  step={0.05}
-                  value={zoomLevel}
-                  onChange={(event) => handleZoomSliderChange(Number(event.target.value))}
-                  className="mt-2 h-1 w-48 cursor-pointer appearance-none rounded-full bg-white/10 accent-white"
-                />
-                <button
-                  type="button"
-                  onClick={toggleScrollZoom}
-                  className="mt-2 w-full rounded-lg border border-white/15 px-2 py-1 text-[11px] font-medium text-slate-100 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
-                >
-                  {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
-                </button>
-              </div>
-            </div>
+            <EnhancedStarfield
+              className="absolute inset-0 -z-10 pointer-events-none rounded-3xl"
+              enabled={Boolean(graphPrefs.showStarfield)}
+              zoom={zoomLevel}
+              event={starfieldEvent}
+              nodePositions={nodePositions}
+              nodePositionsRef={nodePositionsRef}
+            />
             <ForceGraph2D<GraphNode, GraphLink>
               ref={fgRef}
               graphData={graphData}
               nodeRelSize={6}
               warmupTicks={60}
-              backgroundColor="#050B18"
+              backgroundColor="rgba(0,0,0,0)"
               cooldownTicks={0}
               enableZoomInteraction={scrollZoomEnabled}
               linkDirectionalParticles={1}
-              linkDirectionalParticleWidth={(link) =>
-                highlightedLinks.has(linkKey(link)) ? 2 : 0
-              }
-              linkDirectionalParticleColor={(link) =>
-                getParticleColor(link, highlightedLinks.has(linkKey(link)))
-              }
+              linkDirectionalParticleWidth={(link) => {
+                if (!isLinkVisible(link)) return 0;
+                return highlightedLinks.has(linkKey(link)) ? 2 : 0;
+              }}
+              linkDirectionalParticleColor={(link) => {
+                if (!isLinkVisible(link)) return "rgba(0,0,0,0)";
+                return getParticleColor(
+                  link as GraphLink,
+                  highlightedLinks.has(linkKey(link))
+                );
+              }}
               linkDirectionalParticleSpeed={0.003}
               onNodeClick={handleNodeClick}
               onNodeHover={handleNodeHover}
@@ -791,12 +1188,22 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
               onBackgroundClick={handleBackgroundClick}
               nodeCanvasObject={(node, ctx, globalScale) => {
                 const typed = node as GraphNode & { x?: number; y?: number };
+                const isHighlighted = highlightedNodes.has(resolveNodeId(typed));
+                const isHovered = hoveredNodeId === typed.id;
+                const visible = isNodeVisible(typed);
+                ctx.save();
+                ctx.globalAlpha = visible ? 1 : 0;
                 drawNode(typed, ctx, {
                   globalScale,
-                  highlighted: highlightedNodes.has(resolveNodeId(typed)),
-                  hovered: hoveredNodeId === typed.id,
+                  highlighted: isHighlighted,
+                  hovered: isHovered,
                 });
-                const shouldShowLabel = Boolean(graphPrefs.showLabels) || hoveredNodeId === typed.id;
+                ctx.restore();
+                if (!visible) {
+                  return;
+                }
+                const shouldShowLabel =
+                  Boolean(graphPrefs.showLabels) || hoveredNodeId === typed.id;
                 if (!shouldShowLabel) {
                   return;
                 }
@@ -814,12 +1221,14 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
                 ctx.fillText(shortLabel, (typed.x ?? 0) + 10, (typed.y ?? 0) - fontSize);
                 ctx.restore();
               }}
-              linkColor={(link) =>
-                getLinkColor(link as GraphLink, highlightedLinks.has(linkKey(link)))
-              }
-              linkWidth={(link) =>
-                getLinkWidth(link as GraphLink, highlightedLinks.has(linkKey(link)))
-              }
+              linkColor={(link) => {
+                if (!isLinkVisible(link)) return "rgba(0,0,0,0)";
+                return getLinkColor(link as GraphLink, highlightedLinks.has(linkKey(link)));
+              }}
+              linkWidth={(link) => {
+                if (!isLinkVisible(link)) return 0;
+                return getLinkWidth(link as GraphLink, highlightedLinks.has(linkKey(link)));
+              }}
             />
             {hoveredGraphNode ? (
               <div
@@ -854,6 +1263,106 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
                 ) : null}
               </div>
             ) : null}
+          </div>
+
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-between gap-3 px-4 pb-4">
+            <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#0B1220]/85 px-3 py-3 text-[11px] text-slate-200 shadow-lg">
+              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                <span>Zoom</span>
+                <span>{Math.round(zoomLevel * 100)}%</span>
+              </div>
+              <label className="sr-only" htmlFor="graph-zoom-slider">
+                Graph zoom
+              </label>
+              <input
+                id="graph-zoom-slider"
+                type="range"
+                min={0.5}
+                max={2.4}
+                step={0.05}
+                value={zoomLevel}
+                onChange={(event) => handleZoomSliderChange(Number(event.target.value))}
+                className="mt-2 h-1 w-48 cursor-pointer appearance-none rounded-full bg-white/10 accent-white"
+              />
+              <button
+                type="button"
+                onClick={toggleScrollZoom}
+                className="mt-2 w-full rounded-lg border border-white/15 px-2 py-1 text-[11px] font-medium text-slate-100 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+              >
+                {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
+              </button>
+            </div>
+
+            <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#0B1220]/85 px-3 py-3 text-[11px] text-slate-200 shadow-lg">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Legend
+                  </div>
+                  <p className="text-[10px] text-slate-500" aria-hidden="true">
+                    {legendStatusMessage}
+                  </p>
+                </div>
+                {filtersDirty ? (
+                  <button
+                    type="button"
+                    onClick={resetLegendFilters}
+                    className="rounded-full border border-white/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70"
+                  >
+                    Reset filters
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {legendSwatches.map((swatch) => {
+                  const legendKey = swatch.label as LegendKey;
+                  const isActive = activeLegendKeys.has(legendKey);
+                  return (
+                    <button
+                      key={swatch.label}
+                      type="button"
+                      role="switch"
+                      aria-checked={isActive}
+                      onClick={() => toggleLegendKey(legendKey)}
+                      className={[
+                        "flex items-center gap-2 rounded-xl border px-2 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
+                        isActive
+                          ? "border-white/40 bg-white/10 text-white"
+                          : "border-white/10 text-slate-400 hover:border-white/30 hover:text-white",
+                      ].join(" ")}
+                    >
+                      {swatch.kind === "node" ? (
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor: swatch.color,
+                            opacity: isActive ? 1 : 0.3,
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="inline-block h-[2px] w-6"
+                          style={{
+                            background: isActive
+                              ? swatch.color
+                              : "rgba(148, 163, 184, 0.3)",
+                            borderBottom: swatch.dashed
+                              ? isActive
+                                ? "1px dashed rgba(226,232,240,0.6)"
+                                : "1px dashed rgba(148,163,184,0.4)"
+                              : "none",
+                          }}
+                        />
+                      )}
+                      <span>{swatch.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="sr-only" aria-live="polite">
+                {legendStatusMessage}
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "../App";
 
 export interface TaskCardProps {
@@ -84,12 +85,10 @@ export default function TaskCard({
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
 
   const dragMotionStyle = {
-    x: transform?.x ?? 0,
-    y: transform?.y ?? 0,
-    opacity: isDragging ? 0.4 : 1,
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    opacity: isDragging ? 0 : 1,
     border: `1px solid ${accent}33`,
     boxShadow: `0 0 0 rgba(0,0,0,0)`,
-    cursor: isDragging ? "grabbing" : "grab",
   };
 
   return (

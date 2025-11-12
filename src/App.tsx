@@ -26,14 +26,9 @@ import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
 import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
+import { useLocalTasks, type Task, type TaskStatus } from "./hooks/useLocalTasks";
 
-export type Status = "TO-DO" | "IN PROGRESS" | "DONE";
-export type Task = {
-  id: string;
-  title: string;
-  status: Status;
-  description?: string;
-};
+export type Status = TaskStatus;
 
 type ViewMode = "board" | "graph";
 type ToastVariant = "success" | "warn" | "error";
@@ -55,6 +50,22 @@ const initialTasks: Task[] = [
   { id: "t5", title: "Design homepage layout", status: "DONE" },
 ];
 
+const isTaskPayload = (item: unknown): item is Task => {
+  return (
+    Boolean(item) &&
+    typeof item === "object" &&
+    typeof (item as Task).id === "string" &&
+    typeof (item as Task).title === "string" &&
+    typeof (item as Task).status === "string"
+  );
+};
+
+const sanitizeTasks = (data: unknown): Task[] | null => {
+  if (!Array.isArray(data)) return null;
+  const cleaned = data.filter(isTaskPayload);
+  return cleaned.length ? cleaned : null;
+};
+
 export default function App() {
   return (
     <ToastProvider>
@@ -68,7 +79,7 @@ export default function App() {
 
 function AppShell() {
   const { show } = useToast();
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useLocalTasks(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -249,6 +260,50 @@ function AppShell() {
     window.sessionStorage.setItem("flowstate:view", view);
   }, [view]);
 
+  const handleExportTasks = useCallback(() => {
+    try {
+      const payload = JSON.stringify(tasks, null, 2);
+      const blob = new Blob([payload], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "flowstate-tasks.json";
+      anchor.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 0);
+      pushToast("Tasks exported", "success");
+    } catch (error) {
+      pushToast("Export failed", "error");
+      console.error("Flowstate: export failed", error);
+    }
+  }, [pushToast, tasks]);
+
+  const handleImportTasks = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result));
+          const cleaned = sanitizeTasks(parsed);
+          if (cleaned) {
+            setTasks(cleaned);
+            pushToast("Tasks imported", "success");
+            return;
+          }
+        } catch (error) {
+          console.error("Flowstate: import failed", error);
+        }
+        pushToast("Import failed", "error");
+      };
+      reader.readAsText(file);
+    },
+    [pushToast]
+  );
+
   const handleViewChange = (nextView: ViewMode) => {
     setView(nextView);
   };
@@ -314,8 +369,8 @@ function AppShell() {
             <h1 className="text-4xl font-extrabold tracking-wide">FLOWSTATE</h1>
             <p className="mt-3 text-[#8aa0b8]">Your tasks, in motion.</p>
           </div>
-          <div className="flex justify-center gap-3">
-            <button
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
               type="button"
               onClick={handlePaletteOpen}
               className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
@@ -354,6 +409,26 @@ function AppShell() {
                   </button>
                 );
               })}
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                type="button"
+                onClick={handleExportTasks}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+              >
+                <span className="text-base leading-none">⇣</span>
+                Export JSON
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10">
+                <span className="text-base leading-none">⇡</span>
+                Import JSON
+                <input
+                  type="file"
+                  accept="application/json"
+                  className="hidden"
+                  onChange={handleImportTasks}
+                />
+              </label>
             </div>
           </div>
         </header>
