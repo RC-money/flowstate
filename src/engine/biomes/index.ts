@@ -1,3 +1,4 @@
 export * from "./types";
-export { BiomeProvider, useBiomeState } from "./context";
+export { BiomeProvider, useBiome } from "./context";
 export { BIOME_REGISTRY } from "./biomeRegistry";
+export { BiomeManager } from "./manager";

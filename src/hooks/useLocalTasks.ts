@@ -9,6 +9,8 @@ export interface Task {
   tags?: string[];
   notes?: string;
   dependsOn?: string[];
+  darkForest?: boolean;
+  orbitSeed?: { x: number; y: number };
 }
 
 type Tasks = Task[];

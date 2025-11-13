@@ -1,5 +1,12 @@
 import type { Task } from "../../hooks/useLocalTasks";
-import type { CelestialKind, TemporalBody, TemporalEvent, TemporalSnapshot } from "./types";
+import type {
+  CelestialKind,
+  TemporalBody,
+  TemporalEvent,
+  TemporalHistoryFrame,
+  TemporalHistoryNode,
+  TemporalSnapshot,
+} from "./types";
 
 const BASE_HEAT: Record<string, number> = {
   "TO-DO": 0.32,
@@ -42,6 +49,9 @@ export class TemporalPhysicsEngine {
   private raf: number | null = null;
   private listeners = new Set<(snapshot: TemporalSnapshot) => void>();
   private running = false;
+  private history: TemporalHistoryFrame[] = [];
+  private historyLimit = 240;
+  private historyCounter = 0;
 
   syncTasks(tasks: Task[]) {
     tasks.forEach((task, index) => {
@@ -163,8 +173,39 @@ export class TemporalPhysicsEngine {
       body.lastUpdate = now;
     });
     this.listeners.forEach((listener) => listener(this.getSnapshot()));
+    this.recordHistoryFrame(
+      Array.from(this.bodies.values()).map((body) => ({
+        id: body.id,
+        x: body.position.x,
+        y: body.position.y,
+        heat: body.heat,
+        entropy: body.entropy,
+      }))
+    );
     this.raf = window.requestAnimationFrame(this.tick);
   };
+
+  recordHistoryFrame(nodes: TemporalHistoryNode[]): void {
+    if (!nodes.length) return;
+    const frame: TemporalHistoryFrame = {
+      index: this.historyCounter++,
+      timestamp: Date.now(),
+      nodes,
+    };
+    this.history.push(frame);
+    if (this.history.length > this.historyLimit) {
+      this.history.shift();
+    }
+  }
+
+  getHistoryFrames(): TemporalHistoryFrame[] {
+    return this.history.slice();
+  }
+
+  rewindTo(index: number | null): TemporalHistoryFrame | null {
+    if (index === null) return null;
+    return this.history.find((frame) => frame.index === index) ?? null;
+  }
 }
 
 let temporalSingleton: TemporalPhysicsEngine | null = null;

@@ -29,13 +29,20 @@ import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, type Task, type TaskStatus } from "./hooks/useLocalTasks";
 import IntentSurface from "./components/IntentSurface";
-import GenesisForge from "./components/GenesisForge";
+import GenesisForge, { type GenesisPayload } from "./components/GenesisForge";
 import StrangeLoopPanel from "./components/StrangeLoopPanel";
 import CosmicEventBanner from "./components/CosmicEventBanner";
+import DarkForestPanel from "./components/DarkForestPanel";
+import PatternJournal from "./components/PatternJournal";
 import { useObserverEngine } from "./engine/observer/hooks";
 import { useStrangeLoop } from "./engine/strangeLoop";
-import { useMeteorShower } from "./engine/events";
+import { useCosmicEvents } from "./engine/events";
 import { useJester } from "./engine/council";
+import { useBiome } from "./engine/biomes";
+import PersonaPanel from "./components/PersonaPanel";
+import { PERSONA_ROSTER, usePersona } from "./paradox/council";
+import { useReflectionJournal } from "./hooks/useReflectionJournal";
+import { useCelestialStructures } from "./hooks/useCelestialStructures";
 import { BiomeProvider } from "./engine/biomes";
 
 export type { Task } from "./hooks/useLocalTasks";
@@ -44,7 +51,6 @@ export type Status = TaskStatus;
 
 type ViewMode = "board" | "graph";
 type ToastVariant = "success" | "warn" | "error";
-type CelestialKind = "sun" | "moon" | "asteroid";
 type TetherPair = { sourceId: string; targetId: string };
 
 function createBlankTask(status: Status): Task {
@@ -63,6 +69,14 @@ const initialTasks: Task[] = [
   { id: "t4", title: "Set up CI/CD pipeline", status: "IN PROGRESS" },
   { id: "t5", title: "Design homepage layout", status: "DONE" },
 ];
+
+const getTimeOfDay = (): "dawn" | "day" | "dusk" | "night" => {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 10) return "dawn";
+  if (hour >= 10 && hour < 17) return "day";
+  if (hour >= 17 && hour < 21) return "dusk";
+  return "night";
+};
 
 const isTaskPayload = (item: unknown): item is Task => {
   return (
@@ -100,6 +114,9 @@ export default function App() {
 
 function AppShell() {
   const { show } = useToast();
+  const { updateMetrics, intent: biomeIntent, metrics: biomeMetrics } = useBiome();
+  const { tethers, constellations, addTether, setConstellations } = useCelestialStructures();
+  const { reflections, addReflection } = useReflectionJournal();
   const [tasks, setTasks] = useLocalTasks(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -116,7 +133,10 @@ function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
-  const { engine: observerEngine } = useObserverEngine({ tasks });
+  const { engine: observerEngine, insights: observerInsights } = useObserverEngine({ tasks });
+  const [entropyLookup, setEntropyLookup] = useState<Record<string, number>>({});
+  const visibleTasks = useMemo(() => tasks.filter((task) => !task.darkForest), [tasks]);
+  const darkForestTasks = useMemo(() => tasks.filter((task) => task.darkForest), [tasks]);
   const { question: strangeLoopQuestion, refresh: refreshStrangeLoop } = useStrangeLoop({
     engine: observerEngine,
   });
@@ -149,6 +169,10 @@ function AppShell() {
     for (const t of tasks) m[t.id] = t;
     return m;
   }, [tasks]);
+  const darkForestCandidates = useMemo(
+    () => visibleTasks.filter((task) => (entropyLookup[task.id] ?? 0) > 0.8),
+    [visibleTasks, entropyLookup]
+  );
 
   const pushToast = useCallback(
     (message: string, variant: ToastVariant = "success") => {
@@ -159,21 +183,22 @@ function AppShell() {
   );
   const handleCreateTether = useCallback(
     (sourceId: string, targetId: string) => {
-      if (sourceId === targetId) return;
-      setTasks((prev) =>
-        prev.map((task) => {
-          if (task.id !== targetId) return task;
-          const dependsOn = Array.isArray(task.dependsOn) ? task.dependsOn : [];
-          if (dependsOn.includes(sourceId)) return task;
-          return { ...task, dependsOn: [...dependsOn, sourceId] };
-        })
-      );
+      addTether(sourceId, targetId);
       pushToast("Cartographer: A new orbit is forming. Curious.", "success");
     },
-    [pushToast, setTasks]
+    [addTether, pushToast]
   );
-  const { active: meteorActive, message: meteorMessage } = useMeteorShower({
-    onMessage: (text) => pushToast(text, "warn"),
+  const {
+    activeEvent,
+    alertsEnabled: cosmicAlertsEnabled,
+    toggleAlerts,
+  } = useCosmicEvents({
+    metrics: {
+      avgHeat: biomeMetrics.avgHeat,
+      avgEntropy: biomeMetrics.avgEntropy,
+      tetherCount: tethers.length,
+      constellationCount: constellations.length,
+    },
   });
   useJester({
     engine: observerEngine,
@@ -184,6 +209,83 @@ function AppShell() {
       pushToast(`Jester: Is ${title} really your universe’s center? Prove it.`, "warn");
     },
   });
+
+  useEffect(() => {
+    if (!observerEngine?.getSnapshot) return;
+    const snapshot = observerEngine.getSnapshot();
+    const signals = Array.from(snapshot.signals?.values?.() ?? snapshot.signals.values());
+    if (!signals.length) return;
+    const totals = signals.reduce(
+      (acc: { heat: number; entropy: number }, signal: { heat?: number; entropy?: number; taskId?: string }) => {
+        acc.heat += signal.heat ?? 0.4;
+        acc.entropy += signal.entropy ?? 0.4;
+        return acc;
+      },
+      { heat: 0, entropy: 0 }
+    );
+    const lookup: Record<string, number> = {};
+    signals.forEach((signal: { taskId?: string; entropy?: number }) => {
+      if (signal.taskId) {
+        lookup[signal.taskId] = signal.entropy ?? 0;
+      }
+    });
+    setEntropyLookup(lookup);
+    updateMetrics({
+      avgHeat: totals.heat / signals.length,
+      avgEntropy: totals.entropy / signals.length,
+    });
+  }, [observerEngine, tasks, updateMetrics]);
+
+  useEffect(() => {
+    if (!observerEngine?.ingestEvent) return;
+    observerEngine.ingestEvent({
+      type: "constellation_snapshot",
+      timestamp: Date.now(),
+      payload: { constellations },
+    } as any);
+  }, [observerEngine, constellations]);
+
+  const darkForestCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.status === "TO-DO" &&
+          (task.tags?.includes("dark-forest") || task.title.toLowerCase().includes("[df]"))
+      ).length,
+    [tasks]
+  );
+
+  const persona = usePersona({
+    avgHeat: biomeMetrics.avgHeat,
+    avgEntropy: biomeMetrics.avgEntropy,
+    darkForestCount,
+    recentInsights: observerInsights.map((insight) => ({ kind: insight.kind, taskIds: insight.taskIds })),
+    timeOfDay: getTimeOfDay(),
+    userIntent: biomeIntent,
+  });
+  useEffect(() => {
+    if (activeEvent && cosmicAlertsEnabled) {
+      pushToast(activeEvent.message, "warn");
+    }
+  }, [activeEvent, cosmicAlertsEnabled, pushToast]);
+  const handleReflectionSubmit = useCallback(
+    (response: string) => {
+      if (!strangeLoopQuestion) return;
+      const relatedConstellations = constellations
+        .filter((constellation) => strangeLoopQuestion.taskId && constellation.memberIds.includes(strangeLoopQuestion.taskId))
+        .map((constellation) => constellation.id);
+      addReflection({
+        questionId: strangeLoopQuestion.id,
+        question: strangeLoopQuestion.message,
+        response,
+        personaId: persona.id,
+        relatedTaskIds: strangeLoopQuestion.taskId ? [strangeLoopQuestion.taskId] : [],
+        constellationIds: relatedConstellations,
+      });
+      refreshStrangeLoop();
+    },
+    [strangeLoopQuestion, constellations, addReflection, persona.id, refreshStrangeLoop]
+  );
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
@@ -225,6 +327,26 @@ function AppShell() {
       if (nextTask) handleEditTask(nextTask);
     },
     [tasksById, handleEditTask]
+  );
+
+  const handleSendToDarkForest = useCallback(
+    (taskId: string) => {
+      setTasks((prev) =>
+        prev.map((task) => (task.id === taskId ? { ...task, darkForest: true } : task))
+      );
+      pushToast("Archivist: Let it rest in the Dark Forest.", "success");
+    },
+    [pushToast, setTasks]
+  );
+
+  const handleRestoreFromDarkForest = useCallback(
+    (taskId: string) => {
+      setTasks((prev) =>
+        prev.map((task) => (task.id === taskId ? { ...task, darkForest: false } : task))
+      );
+      pushToast("Archivist: Brought back from the Dark Forest.", "success");
+    },
+    [pushToast, setTasks]
   );
 
   const handleMoveTask = useCallback(
@@ -431,14 +553,21 @@ function AppShell() {
   }, []);
 
   const handleGenesisCreate = useCallback(
-    ({ title, kind }: { title: string; kind: CelestialKind }) => {
-      const statusMap: Record<CelestialKind, Status> = {
+    ({ title, description, kind, position }: GenesisPayload) => {
+      const statusMap: Record<GenesisPayload["kind"], Status> = {
         sun: "IN PROGRESS",
         moon: "DONE",
         asteroid: "TO-DO",
+        comet: "TO-DO",
+        "gas-giant": "IN PROGRESS",
       };
       const status = statusMap[kind] ?? "TO-DO";
-      const nextTask = { ...createBlankTask(status), title };
+      const nextTask = {
+        ...createBlankTask(status),
+        title,
+        description,
+        orbitSeed: position,
+      };
       setTasks((prev) => [...prev, nextTask]);
       pushToast(`Condensed a new ${kind.toUpperCase()}`, "success");
       logEvent({ type: "task:add", source: "click" });
@@ -531,11 +660,33 @@ function AppShell() {
         </header>
 
         <IntentSurface />
-        <CosmicEventBanner
-          active={meteorActive}
-          message={meteorMessage ?? "Meteor shower in progress. Asteroids running hot."}
+        <PersonaPanel persona={persona} />
+        <DarkForestPanel
+          candidates={darkForestCandidates}
+          archived={darkForestTasks}
+          onArchive={handleSendToDarkForest}
+          onRestore={handleRestoreFromDarkForest}
         />
-        <StrangeLoopPanel question={strangeLoopQuestion} onRefresh={refreshStrangeLoop} />
+        <CosmicEventBanner
+          event={activeEvent}
+          alertsEnabled={cosmicAlertsEnabled}
+          onToggleAlerts={toggleAlerts}
+        />
+        <StrangeLoopPanel
+          question={strangeLoopQuestion}
+          personaName={persona.name}
+          onRefresh={refreshStrangeLoop}
+          onReflect={handleReflectionSubmit}
+        />
+        <PatternJournal
+          reflections={reflections}
+          personas={Object.values(PERSONA_ROSTER).map((personaMeta) => ({
+            ...personaMeta,
+            rationale: "",
+            questionTemplates: [],
+          }))}
+          constellations={constellations}
+        />
 
         <div className="board-wrapper">
           {view === "board" ? (
@@ -546,7 +697,7 @@ function AppShell() {
               onDragEnd={handleDragEnd}
             >
               <Board
-                tasks={tasks}
+                tasks={visibleTasks}
                 onCardClick={handleCardClick}
                 onAdd={(status) => handleAddTask(status, "click")}
                 onOpenTask={handleOpenTaskById}
@@ -566,7 +717,14 @@ function AppShell() {
               </DragOverlay>
             </DndContext>
           ) : (
-            <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} />
+            <GraphView
+              tasks={visibleTasks}
+              onOpenTask={handleOpenTaskById}
+              onCreateTether={handleCreateTether}
+              onConstellationsChange={setConstellations}
+              tethers={tethers}
+              constellations={constellations}
+            />
           )}
         </div>
       </main>

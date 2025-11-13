@@ -26,6 +26,7 @@ export class ObserverEngineCore {
   private tickTimer: number | null = null;
   private lastTimestamp = Date.now();
   private insightCooldown = new Map<string, number>();
+  private constellations: Array<{ id: string; memberIds: string[]; suggestedName?: string }> = [];
 
   start() {
     if (this.running) return;
@@ -70,6 +71,14 @@ export class ObserverEngineCore {
     const now = event.timestamp ?? Date.now();
     if (event.type === "session_tick") {
       this.sample(now);
+      return;
+    }
+    if (event.type === "constellation_snapshot") {
+      const list = Array.isArray(event.payload?.constellations)
+        ? (event.payload?.constellations as Array<{ id: string; memberIds: string[]; suggestedName?: string }>)
+        : [];
+      this.constellations = list;
+      this.evaluateConstellations();
       return;
     }
     if (!event.taskId) return;
@@ -256,6 +265,26 @@ export class ObserverEngineCore {
     const last = this.insightCooldown.get(key);
     if (!last) return true;
     return now - last > 1000 * 60 * 20;
+  }
+
+  private evaluateConstellations() {
+    if (!this.constellations.length) return;
+    const dominant = this.constellations.reduce((prev, current) =>
+      current.memberIds.length > prev.memberIds.length ? current : prev
+    );
+    const key = `constellation:${dominant.id}`;
+    if (!this.isCooldownComplete(key, Date.now())) return;
+    this.pushInsight({
+      id: createId(),
+      kind: "observation",
+      summary: `${dominant.suggestedName ?? "Constellation"} needs focus.`,
+      detail: "Multiple tethered tasks want to move together.",
+      confidence: Math.min(1, dominant.memberIds.length / 6),
+      taskIds: dominant.memberIds.slice(0, 4),
+      createdAt: Date.now(),
+      data: { constellationId: dominant.id },
+    });
+    this.insightCooldown.set(key, Date.now());
   }
 }
 

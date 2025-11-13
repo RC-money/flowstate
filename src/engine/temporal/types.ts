@@ -1,6 +1,6 @@
 import type { Task } from "../../hooks/useLocalTasks";
 
-export type CelestialKind = "sun" | "moon" | "asteroid" | "comet" | "blackhole";
+export type CelestialKind = "sun" | "moon" | "asteroid" | "comet" | "blackhole" | "gas-giant";
 
 export interface TemporalBody {
   id: string;
@@ -17,6 +17,20 @@ export interface TemporalBody {
   orbitTheta: number;
   lastUpdate: number;
   lastTouchedAt: number;
+}
+
+export interface TemporalHistoryNode {
+  id: string;
+  x: number;
+  y: number;
+  heat?: number;
+  entropy?: number;
+}
+
+export interface TemporalHistoryFrame {
+  index: number;
+  timestamp: number;
+  nodes: TemporalHistoryNode[];
 }
 
 export interface TemporalEvent {

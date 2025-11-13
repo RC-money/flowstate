@@ -25,7 +25,10 @@ import {
 import GraphControls from "./GraphControls";
 import Starfield from "./Starfield";
 import { logEvent } from "../../lib/analytics";
+import { useTemporalPhysics } from "../../engine/temporal";
 import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
+import type { Constellation, Tether } from "../../types/celestial";
+import { analyzeConstellations } from "../../engine/constellations/analyzer";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
@@ -80,6 +83,9 @@ interface GraphViewProps {
   tasks: Task[];
   onOpenTask(id: string): void;
   onCreateTether?: (sourceId: string, targetId: string) => void;
+  onConstellationsChange?: (constellations: Constellation[]) => void;
+  tethers?: Tether[];
+  constellations?: Constellation[];
   prefs?: GraphPreferences;
 }
 
@@ -249,7 +255,15 @@ const loadStoredPrefs = (): GraphPreferences => {
 type DistanceForce = { distance?: (value: number) => void };
 type StrengthForce = { strength?: (value: number) => void };
 
-const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether, prefs }) => {
+const GraphView: React.FC<GraphViewProps> = ({
+  tasks,
+  onOpenTask,
+  onCreateTether,
+  onConstellationsChange,
+  tethers = [],
+  constellations = [],
+  prefs,
+}) => {
   const fgRef = useRef<ForceGraphInstance | undefined>(undefined);
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
   const [strongForce, setStrongForce] = useState<number>(DEFAULT_STRONG);
@@ -265,6 +279,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
     [tasks, graphPrefs]
   );
   const [nodePositions, setNodePositions] = useState<NodePosition[]>([]);
+  const [nodeScreenPositions, setNodeScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
   const autoLockTimer = useRef<number | null>(null);
   const prevForceValues = useRef({ strong: strongForce, charge: chargeForce });
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -522,6 +537,81 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
     locked: isLocked,
     prefersReducedMotion,
   });
+  const {
+    history: temporalHistory,
+    recordHistoryFrame,
+    rewindFrame,
+    rewindTo,
+  } = useTemporalPhysics({ tasks });
+  const [rewindIndex, setRewindIndex] = useState<number | null>(null);
+  const isRewinding = Boolean(rewindFrame);
+
+  const handleRewindChange = useCallback(
+    (value: number) => {
+      if (!temporalHistory.length) return;
+      if (value >= temporalHistory.length - 1) {
+        setRewindIndex(null);
+        rewindTo(null);
+        return;
+      }
+      setRewindIndex(value);
+      rewindTo(temporalHistory[value]?.index ?? null);
+    },
+    [rewindTo, temporalHistory]
+  );
+
+  const exitRewind = useCallback(() => {
+    setRewindIndex(null);
+    rewindTo(null);
+  }, [rewindTo]);
+
+  useEffect(() => {
+    if (!onConstellationsChange) return;
+    const next = analyzeConstellations(tasks, tethers ?? [], nodeScreenPositions);
+    onConstellationsChange(next);
+  }, [tasks, tethers, nodeScreenPositions, onConstellationsChange]);
+
+  const tetherLines = useMemo(() => {
+    if (!tethers.length) return [];
+    return tethers
+      .map((tether) => {
+        const source = nodeScreenPositions[tether.sourceId];
+        const target = nodeScreenPositions[tether.targetId];
+        if (!source || !target) return null;
+        return {
+          id: tether.id,
+          source,
+          target,
+          strength: tether.strength,
+        };
+      })
+      .filter(Boolean) as Array<{
+        id: string;
+        source: { x: number; y: number };
+        target: { x: number; y: number };
+        strength: number;
+      }>;
+  }, [tethers, nodeScreenPositions]);
+
+  const constellationOverlays = useMemo(() => {
+    if (!constellations.length) return [];
+    return constellations
+      .map((constellation) => {
+        const members = constellation.memberIds
+          .map((id) => nodeScreenPositions[id])
+          .filter(Boolean) as Array<{ x: number; y: number }>;
+        if (!members.length) return null;
+      const radius =
+        members.reduce((sum, coord) => sum + Math.hypot(coord.x - constellation.centroid.x, coord.y - constellation.centroid.y), 0) /
+          members.length +
+        40;
+        return {
+          ...constellation,
+          radius,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  }, [constellations, nodeScreenPositions]);
 
   const nodeLookup = useMemo(() => {
     const map = new Map<string, GraphNode>();
@@ -584,6 +674,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
 
   const handleNodeClick = useCallback(
     (node: GraphNode, event?: MouseEvent) => {
+      if (isRewinding) return;
       if (!node || typeof node.id !== "string") return;
       if (event?.shiftKey) {
         event.preventDefault();
@@ -665,6 +756,8 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
   const handleCanvasMouseLeave = useCallback(() => {
     clearHover();
     setTetherDraft(null);
+    setRewindIndex(null);
+    rewindTo(null);
   }, [clearHover]);
 
   const handleBackgroundClick = useCallback(() => {
@@ -1021,6 +1114,8 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
       if (fg?.graph2ScreenCoords && viewport) {
         const rect = viewport.getBoundingClientRect();
         const next: NodePosition[] = [];
+        const historyNodes: Array<{ id: string; x: number; y: number }> = [];
+        const screenMap: Record<string, { x: number; y: number }> = {};
         graphData.nodes.forEach((node) => {
           const typed = node as GraphNode & { x?: number; y?: number };
           if (
@@ -1032,14 +1127,27 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
           }
           const coords = fg.graph2ScreenCoords?.(typed.x, typed.y);
           if (!coords) return;
+          const screenX = coords.x - rect.left;
+          const screenY = coords.y - rect.top;
           next.push({
-            x: coords.x - rect.left,
-            y: coords.y - rect.top,
+            x: screenX,
+            y: screenY,
           });
+          historyNodes.push({
+            id: typed.id,
+            x: screenX,
+            y: screenY,
+          });
+          screenMap[typed.id] = { x: screenX, y: screenY };
         });
         updateNodePositions(next);
+        if (historyNodes.length) {
+          recordHistoryFrame(historyNodes);
+        }
+        setNodeScreenPositions(screenMap);
       } else {
         updateNodePositions([]);
+        setNodeScreenPositions({});
       }
       frame = window.requestAnimationFrame(samplePositions);
     };
@@ -1049,7 +1157,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
         cancelAnimationFrame(frame);
       }
     };
-  }, [graphData.nodes, isNodeVisible, updateNodePositions]);
+  }, [graphData.nodes, isNodeVisible, updateNodePositions, recordHistoryFrame]);
 
   const handleZoomSliderChange = useCallback((value: number) => {
     const next = Math.min(2.4, Math.max(0.5, value));
@@ -1168,6 +1276,37 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
           </p>
         </div>
       </div>
+      {temporalHistory.length > 1 ? (
+        <div className="mx-auto mt-4 w-full max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/70 px-5 py-4 text-sm text-white shadow-lg shadow-black/30 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.4em] text-white/60">
+                Rewind Mode
+              </p>
+              <p className="text-base font-semibold">
+                {isRewinding ? "Rewind Mode Active" : "Scrub through the galaxy’s memory"}
+              </p>
+            </div>
+            {isRewinding ? (
+              <button
+                type="button"
+                onClick={exitRewind}
+                className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60"
+              >
+                Exit Rewind
+              </button>
+            ) : null}
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={temporalHistory.length - 1}
+            value={rewindIndex ?? temporalHistory.length - 1}
+            onChange={(event) => handleRewindChange(Number(event.target.value))}
+            className="mt-4 w-full"
+          />
+        </div>
+      ) : null}
 
       <div className="mx-auto w-full max-w-5xl">
         <div
@@ -1218,6 +1357,62 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether
                   r={6}
                   fill="rgba(255,255,255,0.3)"
                 />
+              </svg>
+            ) : null}
+            {rewindFrame ? (
+              <svg className="pointer-events-none absolute inset-0 z-20" role="presentation">
+                {rewindFrame.nodes.map((node) => (
+                  <circle
+                    key={`ghost-${node.id}-${rewindFrame.index}`}
+                    cx={node.x}
+                    cy={node.y}
+                    r={10}
+                    fill="rgba(148,163,184,0.2)"
+                    stroke="rgba(59,130,246,0.5)"
+                    strokeWidth={1.5}
+                  />
+                ))}
+              </svg>
+            ) : null}
+            {constellationOverlays.map((overlay) =>
+              overlay ? (
+                <div key={overlay.id} className="pointer-events-none absolute inset-0 z-10">
+                  <svg className="absolute inset-0">
+                    <circle
+                      cx={overlay.centroid.x}
+                      cy={overlay.centroid.y}
+                      r={overlay.radius}
+                      fill={overlay.kind === "nursery" ? "rgba(59,130,246,0.08)" : "rgba(236,72,153,0.08)"}
+                      stroke={overlay.kind === "nursery" ? "rgba(59,130,246,0.4)" : "rgba(236,72,153,0.4)"}
+                      strokeWidth={2}
+                    />
+                  </svg>
+                  <div
+                    className="absolute rounded-full border border-white/20 bg-black/60 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white"
+                    style={{
+                      left: overlay.centroid.x - 40,
+                      top: overlay.centroid.y - overlay.radius - 20,
+                    }}
+                  >
+                    {overlay.name ?? overlay.suggestedName}
+                  </div>
+                </div>
+              ) : null
+            )}
+            {tetherLines.length ? (
+              <svg className="pointer-events-none absolute inset-0 z-10">
+                {tetherLines.map((line) => (
+                  <line
+                    key={line.id}
+                    x1={line.source.x}
+                    y1={line.source.y}
+                    x2={line.target.x}
+                    y2={line.target.y}
+                    stroke="rgba(251,146,60,0.4)"
+                    strokeWidth={2 + line.strength * 0.5}
+                    strokeLinecap="round"
+                  />
+                ))}
               </svg>
             ) : null}
             <ForceGraph2D<GraphNode, GraphLink>

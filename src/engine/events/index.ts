@@ -1,1 +1,2 @@
-export { useMeteorShower } from "./useMeteorShower";
+export * from "./types";
+export { useCosmicEvents } from "./useCosmicEvents";

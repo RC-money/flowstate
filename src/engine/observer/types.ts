@@ -4,7 +4,8 @@ export type ObserverEventType =
   | "task_touch"
   | "drag_move"
   | "heat_sample"
-  | "session_tick";
+  | "session_tick"
+  | "constellation_snapshot";
 
 export interface ObserverEvent {
   type: ObserverEventType;
@@ -35,7 +36,7 @@ export interface EntropySample {
 
 export interface ObserverInsight {
   id: string;
-  kind: "entropy-spike" | "drift" | "heat-neglect" | "momentum" | "observation";
+  kind: "entropy-spike" | "drift" | "heat-neglect" | "momentum" | "observation" | "dark-forest";
   summary: string;
   detail?: string;
   confidence: number;
