@@ -5,10 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import ForceGraph2D, {
-  type ForceGraphMethods,
-  type LinkObject,
-} from "react-force-graph-2d";
+import ForceGraph2D, { type LinkObject } from "react-force-graph-2d";
 // @ts-expect-error - d3-force-3d ships without type declarations
 import { forceX as d3ForceX, forceY as d3ForceY } from "d3-force-3d";
 import type { Task } from "../../App";
@@ -28,6 +25,7 @@ import {
 import GraphControls from "./GraphControls";
 import Starfield from "./Starfield";
 import { logEvent } from "../../lib/analytics";
+import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
@@ -81,6 +79,7 @@ export interface GraphPreferences {
 interface GraphViewProps {
   tasks: Task[];
   onOpenTask(id: string): void;
+  onCreateTether?: (sourceId: string, targetId: string) => void;
   prefs?: GraphPreferences;
 }
 
@@ -247,23 +246,10 @@ const loadStoredPrefs = (): GraphPreferences => {
   return { ...DEFAULT_GRAPH_PREFS };
 };
 
-type ForceGraphInstance = ForceGraphMethods<GraphNode, GraphLink> & {
-  d3AlphaTarget?: (alpha: number) => ForceGraphInstance;
-  pauseAnimation?: () => void;
-  resumeAnimation?: () => void;
-  graph2ScreenCoords?: (x: number, y: number) => { x: number; y: number };
-  zoom?: (scale?: number, ms?: number) => number;
-  cameraPosition?: (
-    position?: { x?: number; y?: number; z?: number },
-    lookAt?: { x: number; y: number; z: number },
-    transitionMs?: number
-  ) => ForceGraphInstance | { x: number; y: number; z: number };
-};
-
 type DistanceForce = { distance?: (value: number) => void };
 type StrengthForce = { strength?: (value: number) => void };
 
-const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
+const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, onCreateTether, prefs }) => {
   const fgRef = useRef<ForceGraphInstance | undefined>(undefined);
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
   const [strongForce, setStrongForce] = useState<number>(DEFAULT_STRONG);
@@ -287,6 +273,11 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
   const [scrollZoomEnabled, setScrollZoomEnabled] = useState<boolean>(
     () => graphData.nodes.length < 100
   );
+  const [tetherDraft, setTetherDraft] = useState<{
+    sourceId: string;
+    sourceScreen: { x: number; y: number };
+    cursor: { x: number; y: number };
+  } | null>(null);
   const showStarfield = graphPrefs.showStarfield ?? true;
   const nodePositionsRef = useRef<NodePosition[]>([]);
   const [starfieldEvent, setStarfieldEvent] = useState<StarfieldEventType | null>(null);
@@ -524,6 +515,14 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     return map;
   }, [tasks]);
 
+  useGraphPhysics({
+    fgRef,
+    graphData,
+    taskLookup,
+    locked: isLocked,
+    prefersReducedMotion,
+  });
+
   const nodeLookup = useMemo(() => {
     const map = new Map<string, GraphNode>();
     graphData.nodes.forEach((node) => map.set(node.id, node));
@@ -567,12 +566,43 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     hoverNode ?? (hoveredNodeId ? nodeLookup.get(hoveredNodeId) : undefined);
   const hoveredTask = hoveredGraphNode ? taskLookup.get(hoveredGraphNode.id) : undefined;
 
+  const projectToViewport = useCallback(
+    (graphNode: GraphNode): { x: number; y: number } | null => {
+      const fg = fgRef.current;
+      const viewport = graphViewportRef.current;
+      if (!fg?.graph2ScreenCoords || !viewport) return null;
+      const typed = graphNode as GraphNode & { x?: number; y?: number };
+      const coords = fg.graph2ScreenCoords(typed.x ?? 0, typed.y ?? 0);
+      const rect = viewport.getBoundingClientRect();
+      return {
+        x: coords.x - rect.left,
+        y: coords.y - rect.top,
+      };
+    },
+    []
+  );
+
   const handleNodeClick = useCallback(
-    (node: GraphNode) => {
-      if (!isNodeVisible(node) || typeof node?.id !== "string") return;
+    (node: GraphNode, event?: MouseEvent) => {
+      if (!node || typeof node.id !== "string") return;
+      if (event?.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (tetherDraft && tetherDraft.sourceId !== node.id) {
+          onCreateTether?.(tetherDraft.sourceId, node.id);
+          setTetherDraft(null);
+          return;
+        }
+        const sourceScreen = projectToViewport(node);
+        if (sourceScreen) {
+          setTetherDraft({ sourceId: node.id, sourceScreen, cursor: sourceScreen });
+        }
+        return;
+      }
+      if (!isNodeVisible(node)) return;
       onOpenTask(node.id);
     },
-    [isNodeVisible, onOpenTask]
+    [isNodeVisible, onOpenTask, onCreateTether, projectToViewport, tetherDraft]
   );
 
   const handleNodeHover = useCallback(
@@ -615,15 +645,31 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     }
     rafRef.current = window.requestAnimationFrame(() => {
       setCursor({ x: clientX, y: clientY });
+      if (graphViewportRef.current) {
+        const rect = graphViewportRef.current.getBoundingClientRect();
+        setTetherDraft((prev) =>
+          prev
+            ? {
+                ...prev,
+                cursor: {
+                  x: clientX - rect.left,
+                  y: clientY - rect.top,
+                },
+              }
+            : prev
+        );
+      }
     });
   }, []);
 
   const handleCanvasMouseLeave = useCallback(() => {
     clearHover();
+    setTetherDraft(null);
   }, [clearHover]);
 
   const handleBackgroundClick = useCallback(() => {
     clearHover();
+    setTetherDraft(null);
   }, [clearHover]);
   useEffect(() => {
     return () => {
@@ -679,6 +725,10 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
       return;
     }
     const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && tetherDraft) {
+        setTetherDraft(null);
+        return;
+      }
       if (event.code === "KeyR") {
         if (event.metaKey || event.ctrlKey || isEditableTarget(event.target)) {
           return;
@@ -697,7 +747,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [resetLayout, toggleFreeze]);
+  }, [resetLayout, toggleFreeze, tetherDraft]);
 
   useEffect(() => {
     if (typeof graphPrefs.cohesion === "number") {
@@ -1058,25 +1108,6 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
 
   return (
     <section className="min-h-screen space-y-8 px-4 py-8">
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="relative mb-8 h-48 overflow-hidden rounded-3xl border border-white/10 bg-[#050B18] shadow-lg shadow-black/40">
-          <Starfield className="z-0" enabled={Boolean(graphPrefs.showStarfield)} zoom={zoomLevel} />
-          <div className="relative z-10 flex h-full items-center justify-between px-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Diagnostics
-              </p>
-              <p className="text-base font-semibold text-white">Live Starfield Preview</p>
-              <p className="text-[11px] text-slate-300">
-                If you see particles drifting here, the cosmic layer is healthy.
-              </p>
-            </div>
-            <span className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-200">
-              {graphPrefs.showStarfield ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-        </div>
-      </div>
       <div className="sticky top-6 z-30 w-full">
         <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/85 px-6 py-5 shadow-xl shadow-black/40 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
           <div className="[&_div.flex.flex-wrap.items-center.justify-end.gap-3]:hidden">
@@ -1123,7 +1154,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
                 "rounded-xl border px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
                 showStarfield
                   ? "border-white/40 bg-white/15 text-white"
-                  : "border-white/20 text-slate-200 hover:border-white/40 hover:text-white",
+                : "border-white/20 text-slate-200 hover:border-white/40 hover:text-white",
               ].join(" ")}
             >
               Toggle Starfield
@@ -1138,26 +1169,57 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
         </div>
       </div>
 
-      <div
-        className="relative h-screen w-full overflow-hidden"
-        style={graphBackgroundStyle}
-      >
-        <div className="absolute inset-0 z-10 mx-auto flex h-full w-full max-w-7xl flex-col justify-center px-4">
-          <div
-            ref={graphViewportRef}
-            className="relative h-[640px] w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl shadow-black/40"
-            onMouseMove={handleCanvasMouseMove}
-            onMouseLeave={handleCanvasMouseLeave}
-            onWheelCapture={handleWheelScroll}
-          >
+      <div className="mx-auto w-full max-w-5xl">
+        <div
+          className="relative w-full overflow-hidden border border-white/10 bg-[#050B18] shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
+          style={{
+            borderRadius: "999px",
+            clipPath: "ellipse(96% 58% at 50% 50%)",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0">
             <EnhancedStarfield
-              className="absolute inset-0 -z-10 pointer-events-none rounded-3xl"
+              className="h-full w-full"
               enabled={Boolean(graphPrefs.showStarfield)}
               zoom={zoomLevel}
               event={starfieldEvent}
               nodePositions={nodePositions}
               nodePositionsRef={nodePositionsRef}
             />
+          </div>
+          <div
+            ref={graphViewportRef}
+            className="relative z-10 aspect-[18/9] w-full min-h-[360px] overflow-hidden md:min-h-[520px]"
+            onMouseMove={handleCanvasMouseMove}
+            onMouseLeave={handleCanvasMouseLeave}
+            onWheelCapture={handleWheelScroll}
+            style={graphBackgroundStyle}
+          >
+            {tetherDraft ? (
+              <svg className="pointer-events-none absolute inset-0 z-20" role="presentation">
+                <defs>
+                  <linearGradient id="tether-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#f97316" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#e0f2fe" stopOpacity="0.8" />
+                  </linearGradient>
+                </defs>
+                <line
+                  x1={tetherDraft.sourceScreen.x}
+                  y1={tetherDraft.sourceScreen.y}
+                  x2={tetherDraft.cursor.x}
+                  y2={tetherDraft.cursor.y}
+                  stroke="url(#tether-line)"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                />
+                <circle
+                  cx={tetherDraft.cursor.x}
+                  cy={tetherDraft.cursor.y}
+                  r={6}
+                  fill="rgba(255,255,255,0.3)"
+                />
+              </svg>
+            ) : null}
             <ForceGraph2D<GraphNode, GraphLink>
               ref={fgRef}
               graphData={graphData}
@@ -1179,7 +1241,7 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
                 );
               }}
               linkDirectionalParticleSpeed={0.003}
-              onNodeClick={handleNodeClick}
+              onNodeClick={(node, event) => handleNodeClick(node as GraphNode, event as MouseEvent)}
               onNodeHover={handleNodeHover}
               onNodeDrag={handleNodeDrag}
               onNodeDragEnd={handleNodeDragEnd}
@@ -1264,104 +1326,106 @@ const GraphView: React.FC<GraphViewProps> = ({ tasks, onOpenTask, prefs }) => {
               </div>
             ) : null}
           </div>
+        </div>
+      </div>
 
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-between gap-3 px-4 pb-4">
-            <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#0B1220]/85 px-3 py-3 text-[11px] text-slate-200 shadow-lg">
-              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                <span>Zoom</span>
-                <span>{Math.round(zoomLevel * 100)}%</span>
-              </div>
-              <label className="sr-only" htmlFor="graph-zoom-slider">
-                Graph zoom
-              </label>
-              <input
-                id="graph-zoom-slider"
-                type="range"
-                min={0.5}
-                max={2.4}
-                step={0.05}
-                value={zoomLevel}
-                onChange={(event) => handleZoomSliderChange(Number(event.target.value))}
-                className="mt-2 h-1 w-48 cursor-pointer appearance-none rounded-full bg-white/10 accent-white"
-              />
-              <button
-                type="button"
-                onClick={toggleScrollZoom}
-                className="mt-2 w-full rounded-lg border border-white/15 px-2 py-1 text-[11px] font-medium text-slate-100 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
-              >
-                {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
-              </button>
+      <div className="mx-auto w-full max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/85 px-5 py-4 shadow-xl shadow-black/40 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
+          <div className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-[11px] text-slate-200 shadow-inner shadow-black/30">
+            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              <span>Zoom</span>
+              <span>{Math.round(zoomLevel * 100)}%</span>
             </div>
+            <label className="sr-only" htmlFor="graph-zoom-slider">
+              Graph zoom
+            </label>
+            <input
+              id="graph-zoom-slider"
+              type="range"
+              min={0.5}
+              max={2.4}
+              step={0.05}
+              value={zoomLevel}
+              onChange={(event) => handleZoomSliderChange(Number(event.target.value))}
+              className="mt-2 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-white"
+            />
+            <button
+              type="button"
+              onClick={toggleScrollZoom}
+              className="mt-3 w-full rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+            >
+              {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
+            </button>
+          </div>
 
-            <div className="pointer-events-auto rounded-2xl border border-white/10 bg-[#0B1220]/85 px-3 py-3 text-[11px] text-slate-200 shadow-lg">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                    Legend
-                  </div>
-                  <p className="text-[10px] text-slate-500" aria-hidden="true">
-                    {legendStatusMessage}
-                  </p>
+          <div className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-[11px] text-slate-200 shadow-inner shadow-black/30">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Legend
                 </div>
-                {filtersDirty ? (
+                <p className="text-[10px] text-slate-500" aria-hidden="true">
+                  {legendStatusMessage}
+                </p>
+              </div>
+              {filtersDirty ? (
+                <button
+                  type="button"
+                  onClick={resetLegendFilters}
+                  className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70"
+                >
+                  Reset filters
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {legendSwatches.map((swatch) => {
+                const legendKey = swatch.label as LegendKey;
+                const isActive = activeLegendKeys.has(legendKey);
+                return (
                   <button
+                    key={swatch.label}
                     type="button"
-                    onClick={resetLegendFilters}
-                    className="rounded-full border border-white/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70"
+                    role="switch"
+                    aria-checked={isActive}
+                    onClick={() => toggleLegendKey(legendKey)}
+                    className={[
+                      "flex items-center gap-2 rounded-xl border px-2 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
+                      isActive
+                        ? "border-white/40 bg-white/10 text-white"
+                        : "border-white/10 text-slate-400 hover:border-white/30 hover:text-white",
+                    ].join(" ")}
                   >
-                    Reset filters
+                    {swatch.kind === "node" ? (
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{
+                          backgroundColor: swatch.color,
+                          opacity: isActive ? 1 : 0.3,
+                        }}
+                      />
+                    ) : (
+                      <span
+                        className="inline-block h-[2px] w-6"
+                        style={{
+                          background: isActive
+                            ? swatch.color
+                            : "rgba(148, 163, 184, 0.3)",
+                          borderBottom: swatch.dashed
+                            ? isActive
+                              ? "1px dashed rgba(226,232,240,0.6)"
+                              : "1px dashed rgba(148,163,184,0.4)"
+                            : "none",
+                        }}
+                      />
+                    )}
+                    <span>{swatch.label}</span>
                   </button>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {legendSwatches.map((swatch) => {
-                  const legendKey = swatch.label as LegendKey;
-                  const isActive = activeLegendKeys.has(legendKey);
-                  return (
-                    <button
-                      key={swatch.label}
-                      type="button"
-                      role="switch"
-                      aria-checked={isActive}
-                      onClick={() => toggleLegendKey(legendKey)}
-                      className={[
-                        "flex items-center gap-2 rounded-xl border px-2 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
-                        isActive
-                          ? "border-white/40 bg-white/10 text-white"
-                          : "border-white/10 text-slate-400 hover:border-white/30 hover:text-white",
-                      ].join(" ")}
-                    >
-                      {swatch.kind === "node" ? (
-                        <span
-                          className="inline-block h-2.5 w-2.5 rounded-full"
-                          style={{
-                            backgroundColor: swatch.color,
-                            opacity: isActive ? 1 : 0.3,
-                          }}
-                        />
-                      ) : (
-                        <span
-                          className="inline-block h-[2px] w-6"
-                          style={{
-                            background: isActive
-                              ? swatch.color
-                              : "rgba(148, 163, 184, 0.3)",
-                            borderBottom: swatch.dashed
-                              ? isActive
-                                ? "1px dashed rgba(226,232,240,0.6)"
-                                : "1px dashed rgba(148,163,184,0.4)"
-                              : "none",
-                          }}
-                        />
-                      )}
-                      <span>{swatch.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="sr-only" aria-live="polite">
-                {legendStatusMessage}
-              </div>
+                );
+              })}
+            </div>
+            <div className="sr-only" aria-live="polite">
+              {legendStatusMessage}
             </div>
           </div>
         </div>

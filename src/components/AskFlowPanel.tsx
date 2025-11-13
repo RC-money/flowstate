@@ -5,23 +5,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-
-const mockAskFlow = async (prompt: string): Promise<string> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(
-        `Flowstate draft: "${prompt.slice(0, 60)}"${
-          prompt.length > 60 ? "…" : ""
-        }\n– summarize blockers, surface dependencies, ship.`
-      );
-    }, 650);
-  });
-};
+import { askFlow as askFlowStub, rag } from "../lib/ai";
+import { useToast } from "./Toast";
 
 type AskFlowPanelProps = {
   open: boolean;
   onClose: () => void;
-  askFlow?: (query: string) => Promise<string>;
 };
 
 const isAIEnabled = () =>
@@ -29,15 +18,13 @@ const isAIEnabled = () =>
     __FLOWSTATE_ENABLE_AI?: boolean;
   }).__FLOWSTATE_ENABLE_AI === true;
 
-export default function AskFlowPanel({
-  open,
-  onClose,
-  askFlow = mockAskFlow,
-}: AskFlowPanelProps) {
+export default function AskFlowPanel({ open, onClose }: AskFlowPanelProps) {
+  const { show } = useToast();
   const [prompt, setPrompt] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [context, setContext] = useState<string[]>([]);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -47,6 +34,7 @@ export default function AskFlowPanel({
   const closePanel = useCallback(() => {
     setLoading(false);
     setError(null);
+    setContext([]);
     onClose();
   }, [onClose]);
 
@@ -59,6 +47,7 @@ export default function AskFlowPanel({
     setPrompt("");
     setAnswer(null);
     setError(null);
+    setContext([]);
   }, [open]);
 
   useEffect(() => {
@@ -88,12 +77,19 @@ export default function AskFlowPanel({
     setError(null);
     setAnswer(null);
     try {
-      const result = await askFlow(prompt.trim());
-      setAnswer(result);
+      const normalized = prompt.trim();
+      const [flowAnswer, references] = await Promise.all([
+        askFlowStub(normalized),
+        rag.search(normalized),
+      ]);
+      setAnswer(flowAnswer);
+      setContext(references);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Something went sideways—try again."
       );
+      console.error("Flowstate AskFlowPanel error", err);
+      show("Flow assist hit turbulence. Try again.", { variant: "warn" });
     } finally {
       setLoading(false);
     }
@@ -174,16 +170,27 @@ export default function AskFlowPanel({
             disabled={!aiEnabled || loading || !prompt.trim()}
             className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-white/40 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           >
-            {loading ? "Sending…" : "Send"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-transparent"
+                />
+                Sending…
+              </span>
+            ) : (
+              "Send"
+            )}
           </button>
           <button
             type="button"
-            onClick={() => {
-              setPrompt("");
-              setAnswer(null);
-              setError(null);
-              setLoading(false);
-            }}
+          onClick={() => {
+            setPrompt("");
+            setAnswer(null);
+            setError(null);
+            setLoading(false);
+            setContext([]);
+          }}
             className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
           >
             Reset
@@ -196,11 +203,33 @@ export default function AskFlowPanel({
               the feature flag flips.
             </p>
           ) : loading ? (
-            <p className="animate-pulse text-slate-400">Synthesizing…</p>
+            <div className="flex items-center gap-2 text-slate-400">
+              <span
+                aria-hidden="true"
+                className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-transparent"
+              />
+              Synthesizing…
+            </div>
           ) : error ? (
             <p className="text-rose-300">{error}</p>
           ) : answer ? (
-            <pre className="whitespace-pre-wrap text-[#E6EDF3]">{answer}</pre>
+            <div className="space-y-4">
+              <pre className="whitespace-pre-wrap text-[#E6EDF3]">{answer}</pre>
+              {context.length ? (
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
+                  <p className="mb-2 font-semibold uppercase tracking-wide text-slate-400">
+                    RAG context
+                  </p>
+                  <ul className="space-y-1">
+                    {context.map((entry) => (
+                      <li key={entry} className="text-slate-300">
+                        • {entry}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <p className="text-slate-400">Responses land here.</p>
           )}
@@ -209,5 +238,3 @@ export default function AskFlowPanel({
     </div>
   );
 }
-
-export { mockAskFlow };

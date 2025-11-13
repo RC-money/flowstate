@@ -3,6 +3,12 @@ import type { GraphLink, GraphNode } from "./graphTransforms";
 
 type ColumnID = Task["status"] extends string ? Task["status"] : string;
 
+export const STATUS_COLORS = {
+  "TO-DO": { core: "#47A3F3", glow: "rgba(71,163,243,0.45)" },
+  "IN PROGRESS": { core: "#F7B84B", glow: "rgba(247,184,75,0.45)" },
+  DONE: { core: "#4ADE80", glow: "rgba(74,222,128,0.45)" },
+} as const;
+
 /**
  * Palette reference:
  * --accent-cyan: 190 83% 60%
@@ -34,7 +40,8 @@ export const nodeSize = (deps: number): number => {
 const getCoreRadius = (node: GraphNode, globalScale: number): number => {
   const base = nodeSize(node.deps);
   const scale = Math.max(0.6, 1 / Math.sqrt(globalScale || 1));
-  return base * scale;
+  const raw = base * scale;
+  return Math.max(6, Math.min(14, raw));
 };
 
 type RenderableGraphNode = GraphNode & { x?: number; y?: number };
@@ -45,22 +52,44 @@ export const drawNode = (
   opts: { globalScale: number; highlighted: boolean; hovered: boolean }
 ) => {
   const radius = getCoreRadius(node, opts.globalScale);
-  const color = nodeColor(node.status, node.blocked);
-  const haloColor = opts.highlighted
-    ? "rgba(255,255,255,0.35)"
-    : "rgba(17,24,39,0.0)";
+  const statusKey = (node.status ?? "TO-DO") as keyof typeof STATUS_COLORS;
+  const palette = STATUS_COLORS[statusKey] ?? STATUS_COLORS["TO-DO"];
+  const planetCenterX = node.x ?? 0;
+  const planetCenterY = node.y ?? 0;
+
+  ctx.save();
+  // Glow aura
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = palette.glow;
+  ctx.filter = "blur(6px)";
+  ctx.beginPath();
+  ctx.arc(planetCenterX, planetCenterY, radius * 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.closePath();
+  ctx.restore();
+
+  const gradient = ctx.createRadialGradient(
+    planetCenterX,
+    planetCenterY,
+    radius * 0.1,
+    planetCenterX,
+    planetCenterY,
+    radius
+  );
+  gradient.addColorStop(0, "#ffffff");
+  gradient.addColorStop(0.35, palette.core);
+  gradient.addColorStop(1, palette.core);
 
   ctx.save();
   if (opts.highlighted || opts.hovered) {
-    ctx.shadowColor = haloColor;
-    ctx.shadowBlur = opts.hovered ? radius * 2.5 : radius * 1.5;
+    ctx.shadowColor = palette.glow;
+    ctx.shadowBlur = opts.hovered ? radius * 3 : radius * 1.5;
   }
-
   ctx.beginPath();
-  ctx.fillStyle = color;
-  ctx.strokeStyle = opts.hovered ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.15)";
-  ctx.lineWidth = opts.hovered ? 2 : 1;
-  ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI);
+  ctx.fillStyle = gradient;
+  ctx.strokeStyle = opts.hovered ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.12)";
+  ctx.lineWidth = opts.hovered ? 1.75 : 1;
+  ctx.arc(planetCenterX, planetCenterY, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.closePath();

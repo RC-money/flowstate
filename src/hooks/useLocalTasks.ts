@@ -5,8 +5,10 @@ export interface Task {
   id: string;
   title: string;
   status: TaskStatus;
+  description?: string;
   tags?: string[];
   notes?: string;
+  dependsOn?: string[];
 }
 
 type Tasks = Task[];
@@ -82,4 +84,27 @@ export const useLocalTasks = (
   }, [tasks]);
 
   return [tasks, setTasks];
+};
+
+export const exportTasks = (tasks: Tasks): string => {
+  try {
+    return JSON.stringify(tasks, null, 2);
+  } catch (error) {
+    console.error("[flowstate] exportTasks failed:", error);
+    return "[]";
+  }
+};
+
+export const importTasks = (raw: string): Tasks | null => {
+  try {
+    const parsed = JSON.parse(raw);
+    const normalized = coerceTasks(parsed);
+    if (!normalized) {
+      console.error("[flowstate] importTasks rejected payload.");
+    }
+    return normalized;
+  } catch (error) {
+    console.error("[flowstate] importTasks failed:", error);
+    return null;
+  }
 };

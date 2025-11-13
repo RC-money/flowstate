@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 export type StarEvent = "add" | "move" | "complete" | null;
 
@@ -26,6 +26,14 @@ type Star = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const getMeteorMultiplier = (): number => {
+  if (typeof document === "undefined") return 1;
+  const raw = document.documentElement.style.getPropertyValue("--meteor-particle-speed");
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return value;
+};
 
 const EVENT_COLORS: Record<Exclude<StarEvent, null>, [number, number, number]> = {
   add: [56, 189, 248],
@@ -69,6 +77,10 @@ const Starfield: React.FC<StarfieldProps> = ({
   const pulseProgressRef = useRef(0);
   const breathingPhaseRef = useRef(Math.random() * Math.PI * 2);
   const lastTimeRef = useRef<number>(performance.now());
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -87,6 +99,27 @@ const Starfield: React.FC<StarfieldProps> = ({
     pulseColorRef.current = EVENT_COLORS[event];
     pulseProgressRef.current = 0;
   }, [event]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+    };
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+    } else {
+      mediaQuery.addListener(handleChange);
+    }
+    setPrefersReducedMotion(mediaQuery.matches);
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -130,8 +163,10 @@ const Starfield: React.FC<StarfieldProps> = ({
         ? targetsRef.current
         : nodePositionsRef?.current ?? [];
 
+      const meteorBoost = getMeteorMultiplier();
+
       for (const star of starsRef.current) {
-        star.x += star.speed * parallax;
+        star.x += star.speed * parallax * meteorBoost;
         star.twinkle += 0.0015 * dt;
 
         if (star.gravitate && gravityTargets.length > 0) {
@@ -208,34 +243,65 @@ const Starfield: React.FC<StarfieldProps> = ({
         ctx.restore();
       }
 
-      frameRef.current = window.requestAnimationFrame(draw);
+      if (!prefersReducedMotion && !document.hidden) {
+        frameRef.current = window.requestAnimationFrame(draw);
+      } else {
+        frameRef.current = null;
+      }
     };
 
-    frameRef.current = window.requestAnimationFrame(draw);
+    const startAnimation = () => {
+      if (prefersReducedMotion || document.hidden) {
+        frameRef.current = null;
+        draw(performance.now());
+        return;
+      }
+      if (frameRef.current === null) {
+        lastTimeRef.current = performance.now();
+        frameRef.current = window.requestAnimationFrame(draw);
+      }
+    };
 
-    return () => {
+    const stopAnimation = () => {
       if (frameRef.current !== null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = null;
       }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopAnimation();
+      } else if (!prefersReducedMotion) {
+        startAnimation();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    startAnimation();
+
+    return () => {
+      stopAnimation();
       if (resizeObserverRef.current && canvas) {
         resizeObserverRef.current.unobserve(canvas);
       }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [enabled, tint]);
+  }, [enabled, tint, prefersReducedMotion]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      className={[
-        "absolute inset-0 pointer-events-none rounded-2xl",
-        className ?? "-z-10",
-      ]
+    <div
+      className={["pointer-events-none", className ?? "-z-10"]
         .filter(Boolean)
         .join(" ")}
-      style={{ transition: "opacity 0.35s ease", opacity: enabled ? 1 : 0 }}
-    />
+    >
+      <canvas
+        ref={canvasRef}
+        aria-hidden
+        className="absolute inset-0 rounded-2xl"
+        style={{ transition: "opacity 0.35s ease", opacity: enabled ? 1 : 0 }}
+      />
+    </div>
   );
 };
 

@@ -21,17 +21,31 @@ import Card from "./components/Card";
 import TaskModal from "./components/TaskModal";
 import GraphView from "./components/GraphView/GraphView";
 import NoiseOverlay from "./components/NoiseOverlay";
+import Wordmark from "./components/Wordmark";
 import { useHotkeys } from "./hooks/useHotkeys";
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
 import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, type Task, type TaskStatus } from "./hooks/useLocalTasks";
+import IntentSurface from "./components/IntentSurface";
+import GenesisForge from "./components/GenesisForge";
+import StrangeLoopPanel from "./components/StrangeLoopPanel";
+import CosmicEventBanner from "./components/CosmicEventBanner";
+import { useObserverEngine } from "./engine/observer/hooks";
+import { useStrangeLoop } from "./engine/strangeLoop";
+import { useMeteorShower } from "./engine/events";
+import { useJester } from "./engine/council";
+import { BiomeProvider } from "./engine/biomes";
+
+export type { Task } from "./hooks/useLocalTasks";
 
 export type Status = TaskStatus;
 
 type ViewMode = "board" | "graph";
 type ToastVariant = "success" | "warn" | "error";
+type CelestialKind = "sun" | "moon" | "asteroid";
+type TetherPair = { sourceId: string; targetId: string };
 
 function createBlankTask(status: Status): Task {
   return {
@@ -69,10 +83,17 @@ const sanitizeTasks = (data: unknown): Task[] | null => {
 export default function App() {
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-[#0B1220] text-white">
-        <NoiseOverlay />
-        <AppShell />
-      </div>
+      <BiomeProvider>
+        <div
+          className="min-h-screen text-white transition-colors"
+          style={{
+            backgroundImage: "var(--biome-bg, linear-gradient(135deg,#050B18,#0B1220))",
+          }}
+        >
+          <NoiseOverlay />
+          <AppShell />
+        </div>
+      </BiomeProvider>
     </ToastProvider>
   );
 }
@@ -91,9 +112,14 @@ function AppShell() {
     const stored = window.sessionStorage.getItem("flowstate:view");
     return stored === "graph" ? "graph" : "board";
   });
+  const [showGraph, setShowGraph] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
+  const { engine: observerEngine } = useObserverEngine({ tasks });
+  const { question: strangeLoopQuestion, refresh: refreshStrangeLoop } = useStrangeLoop({
+    engine: observerEngine,
+  });
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -131,6 +157,33 @@ function AppShell() {
     },
     [show]
   );
+  const handleCreateTether = useCallback(
+    (sourceId: string, targetId: string) => {
+      if (sourceId === targetId) return;
+      setTasks((prev) =>
+        prev.map((task) => {
+          if (task.id !== targetId) return task;
+          const dependsOn = Array.isArray(task.dependsOn) ? task.dependsOn : [];
+          if (dependsOn.includes(sourceId)) return task;
+          return { ...task, dependsOn: [...dependsOn, sourceId] };
+        })
+      );
+      pushToast("Cartographer: A new orbit is forming. Curious.", "success");
+    },
+    [pushToast, setTasks]
+  );
+  const { active: meteorActive, message: meteorMessage } = useMeteorShower({
+    onMessage: (text) => pushToast(text, "warn"),
+  });
+  useJester({
+    engine: observerEngine,
+    tasks,
+    setTasks,
+    onChallenge: (task) => {
+      const title = task.title || "this task";
+      pushToast(`Jester: Is ${title} really your universe’s center? Prove it.`, "warn");
+    },
+  });
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
@@ -326,7 +379,23 @@ function AppShell() {
       preventDefault: true,
       stopPropagation: true,
     },
+    {
+      combo: "g",
+      handler: () => setShowGraph((prev) => !prev),
+      enabled: !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
   ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handleGraphToggle = () => setShowGraph((prev) => !prev);
+    window.addEventListener("flowstate:toggle:graph", handleGraphToggle);
+    return () => {
+      window.removeEventListener("flowstate:toggle:graph", handleGraphToggle);
+    };
+  }, []);
 
   const commands: Command[] = useMemo(
     () => [
@@ -361,30 +430,58 @@ function AppShell() {
     });
   }, []);
 
+  const handleGenesisCreate = useCallback(
+    ({ title, kind }: { title: string; kind: CelestialKind }) => {
+      const statusMap: Record<CelestialKind, Status> = {
+        sun: "IN PROGRESS",
+        moon: "DONE",
+        asteroid: "TO-DO",
+      };
+      const status = statusMap[kind] ?? "TO-DO";
+      const nextTask = { ...createBlankTask(status), title };
+      setTasks((prev) => [...prev, nextTask]);
+      pushToast(`Condensed a new ${kind.toUpperCase()}`, "success");
+      logEvent({ type: "task:add", source: "click" });
+    },
+    [pushToast, setTasks]
+  );
+
   return (
     <>
+      {showGraph ? (
+        <div className="pointer-events-none fixed inset-0 -z-10">
+              <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} onCreateTether={handleCreateTether} />
+        </div>
+      ) : null}
       <main className="mx-auto max-w-screen-2xl px-4 py-8 text-white">
         <header className="text-center space-y-4">
-          <div>
-            <h1 className="text-4xl font-extrabold tracking-wide">FLOWSTATE</h1>
-            <p className="mt-3 text-[#8aa0b8]">Your tasks, in motion.</p>
+          <div className="flex flex-col items-center gap-3">
+            <h1 className="sr-only">Flowstate</h1>
+            <div className="hidden min-h-[64px] w-full items-center justify-center sm:flex">
+              <Wordmark />
+            </div>
+            <div className="sm:hidden">
+              <p className="text-3xl font-extrabold tracking-wide text-white">FLOWSTATE</p>
+            </div>
+            <p className="text-[#8aa0b8]">Your tasks, in motion.</p>
           </div>
-            <div className="flex flex-wrap justify-center gap-3">
-              <button
-              type="button"
-              onClick={handlePaletteOpen}
-              className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
-            >
-              ⌘K
-            </button>
-            <button
-              type="button"
-              onClick={() => setAskOpen(true)}
-              className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
-            >
-              Ask Flow
-            </button>
-          </div>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button
+            type="button"
+            onClick={handlePaletteOpen}
+            className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+          >
+            ⌘K
+          </button>
+          <button
+            type="button"
+            onClick={() => setAskOpen(true)}
+            className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+          >
+            Ask Flow
+          </button>
+          <GenesisForge onGenesis={handleGenesisCreate} />
+        </div>
             <div className="flex justify-center mt-6 mb-4">
               <div
                 role="group"
@@ -432,6 +529,13 @@ function AppShell() {
             </div>
           </div>
         </header>
+
+        <IntentSurface />
+        <CosmicEventBanner
+          active={meteorActive}
+          message={meteorMessage ?? "Meteor shower in progress. Asteroids running hot."}
+        />
+        <StrangeLoopPanel question={strangeLoopQuestion} onRefresh={refreshStrangeLoop} />
 
         <div className="board-wrapper">
           {view === "board" ? (
