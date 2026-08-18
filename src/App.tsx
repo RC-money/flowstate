@@ -38,9 +38,7 @@ import { useObserverEngine } from "./engine/observer/hooks";
 import { useCosmicEvents } from "./engine/events";
 import { useJester } from "./engine/council";
 import { useBiome } from "./engine/biomes";
-import SignalLine from "./components/SignalLine";
 import Observatory from "./components/Observatory";
-import { usePersona } from "./paradox/council";
 import { useCelestialStructures } from "./hooks/useCelestialStructures";
 import { BiomeProvider } from "./engine/biomes";
 
@@ -83,13 +81,6 @@ const initialTasks: Task[] = [
   seedTask("t5", "Design homepage layout", "DONE", 1),
 ];
 
-const getTimeOfDay = (): "dawn" | "day" | "dusk" | "night" => {
-  const hour = new Date().getHours();
-  if (hour >= 5 && hour < 10) return "dawn";
-  if (hour >= 10 && hour < 17) return "day";
-  if (hour >= 17 && hour < 21) return "dusk";
-  return "night";
-};
 
 const isTaskPayload = (item: unknown): item is Task => {
   return (
@@ -128,7 +119,7 @@ export default function App() {
 
 function AppShell() {
   const { show } = useToast();
-  const { updateMetrics, intent: biomeIntent, metrics: biomeMetrics } = useBiome();
+  const { updateMetrics, metrics: biomeMetrics } = useBiome();
   const { tethers, constellations, addTether, setConstellations } = useCelestialStructures();
   const [tasks, setTasks] = useLocalTasks(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -148,7 +139,7 @@ function AppShell() {
   const [observatoryOpen, setObservatoryOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
-  const { engine: observerEngine, insights: observerInsights } = useObserverEngine({ tasks });
+  const { engine: observerEngine } = useObserverEngine({ tasks });
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.darkForest), [tasks]);
   const darkForestTasks = useMemo(() => tasks.filter((task) => task.darkForest), [tasks]);
 
@@ -242,24 +233,7 @@ function AppShell() {
     } as unknown as Parameters<typeof observerEngine.ingestEvent>[0]);
   }, [observerEngine, constellations]);
 
-  const darkForestCount = useMemo(
-    () =>
-      tasks.filter(
-        (task) =>
-          task.status === "TO-DO" &&
-          (task.tags?.includes("dark-forest") || task.title.toLowerCase().includes("[df]"))
-      ).length,
-    [tasks]
-  );
 
-  const persona = usePersona({
-    avgHeat: biomeMetrics.avgHeat,
-    avgEntropy: biomeMetrics.avgEntropy,
-    darkForestCount,
-    recentInsights: observerInsights.map((insight) => ({ kind: insight.kind, taskIds: insight.taskIds })),
-    timeOfDay: getTimeOfDay(),
-    userIntent: biomeIntent,
-  });
   useEffect(() => {
     if (activeEvent && cosmicAlertsEnabled) {
       pushToast(activeEvent.message, "warn");
@@ -656,11 +630,6 @@ function AppShell() {
           </div>
         </header>
 
-        <SignalLine
-          persona={persona}
-          event={activeEvent}
-          onOpenObservatory={() => setObservatoryOpen(true)}
-        />
 
         <div className="board-wrapper">
           {view === "board" ? (

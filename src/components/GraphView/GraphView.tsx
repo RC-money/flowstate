@@ -22,7 +22,6 @@ import {
   getParticleColor,
   legendSwatches,
 } from "./graphStyles";
-import GraphControls from "./GraphControls";
 import Starfield from "./Starfield";
 import { logEvent } from "../../lib/analytics";
 import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
@@ -127,22 +126,6 @@ const DEFAULT_GRAPH_PREFS: GraphPreferences = {
   spacing: DEFAULT_SPACING,
 };
 
-let driftStarsInjected = false;
-const ensureDriftStars = () => {
-  if (driftStarsInjected || typeof document === "undefined") {
-    return;
-  }
-  const style = document.createElement("style");
-  style.textContent = `
-    @keyframes driftStars {
-      0% { transform: translate3d(0, 0, 0); }
-      50% { transform: translate3d(-80px, -50px, 0); }
-      100% { transform: translate3d(0, 0, 0); }
-    }
-  `;
-  document.head.appendChild(style);
-  driftStarsInjected = true;
-};
 
 const normalizeStatusKey = (status?: string): keyof typeof COLUMN_TARGETS => {
   if (!status) return "todo";
@@ -321,7 +304,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     sourceScreen: { x: number; y: number };
     cursor: { x: number; y: number };
   } | null>(null);
-  const showStarfield = graphPrefs.showStarfield ?? true;
   const nodePositionsRef = useRef<NodePosition[]>([]);
   const [starfieldEvent, setStarfieldEvent] = useState<StarfieldEventType | null>(null);
   const starfieldEventResetRef = useRef<number | null>(null);
@@ -719,24 +701,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     [debouncedSetHover, isNodeVisible]
   );
 
-  const handleStrongForceChange = useCallback(
-    (value: number) => {
-      handleInteractionStart();
-      setStrongForce(value);
-      handleInteractionEnd();
-    },
-    [handleInteractionEnd, handleInteractionStart]
-  );
-
-  const handleChargeForceChange = useCallback(
-    (value: number) => {
-      handleInteractionStart();
-      setChargeForce(value);
-      handleInteractionEnd();
-    },
-    [handleInteractionEnd, handleInteractionStart]
-  );
-
   const handleCanvasMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const { clientX, clientY } = event;
     if (typeof window === "undefined") {
@@ -1012,52 +976,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     prefs?.showStarfield,
   ]);
 
-  const handlePrefsChange = (partial: Partial<GraphPreferences>) => {
-    const changeCluster =
-      typeof partial.clusterMode !== "undefined" &&
-      partial.clusterMode !== graphPrefs.clusterMode;
-    const layoutValuesChanged =
-      typeof partial.cohesion === "number" || typeof partial.spacing === "number";
-    const requiresReheat = changeCluster || layoutValuesChanged;
-    if (layoutValuesChanged) {
-      if (typeof partial.cohesion === "number") {
-        setStrongForce(-Math.abs(partial.cohesion));
-      }
-      if (typeof partial.spacing === "number") {
-        setChargeForce(-Math.abs(partial.spacing));
-      }
-    }
-    if (changeCluster && isLocked) {
-      unlockLayout();
-    }
-    if (changeCluster) {
-      clearHover();
-    }
-    if (requiresReheat) {
-      fgRef.current?.d3ReheatSimulation?.();
-      handleInteractionStart();
-      handleInteractionEnd();
-    }
-
-    const analyticsLayoutChange =
-      typeof partial.cohesion === "number" ||
-      typeof partial.spacing === "number" ||
-      typeof partial.preset === "string";
-
-    if (changeCluster) {
-      logEvent({ type: "graph:lock" });
-    }
-    if (analyticsLayoutChange) {
-      logEvent({ type: "palette:run" });
-    }
-
-    setGraphPrefs((prev) => ({ ...prev, ...partial }));
-  };
-
-  useEffect(() => {
-    ensureDriftStars();
-  }, []);
-
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg?.zoom) return;
@@ -1208,75 +1126,8 @@ const GraphView: React.FC<GraphViewProps> = ({
     [scrollZoomEnabled]
   );
 
-  const handleStarfieldToggle = useCallback(() => {
-    setGraphPrefs((prev) => {
-      const next = !(prev.showStarfield ?? true);
-      return { ...prev, showStarfield: next };
-    });
-  }, []);
-
   return (
     <section className="min-h-screen space-y-8 px-4 py-8">
-      <div className="sticky top-6 z-30 w-full">
-        <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/85 px-6 py-5 shadow-xl shadow-black/40 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
-          <div className="[&_div.flex.flex-wrap.items-center.justify-end.gap-3]:hidden">
-            <GraphControls
-              strongForce={strongForce}
-              chargeForce={chargeForce}
-              isFrozen={isLocked}
-              onStrongForceChange={handleStrongForceChange}
-              onChargeForceChange={handleChargeForceChange}
-              onReset={resetLayout}
-              onToggleFreeze={toggleFreeze}
-              prefs={{
-                clusterMode: graphPrefs.clusterMode ?? "none",
-                showTemporal: Boolean(graphPrefs.showTemporal),
-                showLabels: Boolean(graphPrefs.showLabels),
-                autoLock: graphPrefs.autoLock ?? true,
-                preset: graphPrefs.preset,
-                cohesion: graphPrefs.cohesion ?? Math.abs(strongForce),
-                spacing: graphPrefs.spacing ?? Math.abs(chargeForce),
-              }}
-              onChange={handlePrefsChange}
-            />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={resetLayout}
-              className="rounded-xl border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10"
-            >
-              Reset Layout
-            </button>
-            <button
-              type="button"
-              onClick={toggleFreeze}
-              className="rounded-xl border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10"
-            >
-              {isLocked ? "Unlock Layout" : "Lock Layout"}
-            </button>
-            <button
-              type="button"
-              onClick={handleStarfieldToggle}
-              aria-pressed={showStarfield}
-              className={[
-                "rounded-xl border px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
-                showStarfield
-                  ? "border-white/40 bg-white/15 text-white"
-                : "border-white/20 text-slate-200 hover:border-white/40 hover:text-white",
-              ].join(" ")}
-            >
-              Toggle Starfield
-            </button>
-          </div>
-          <p className="mt-3 text-[11px] text-slate-400">
-            Tip: drag to pan, zoom with the slider or toggle scroll below,{" "}
-            <kbd className="rounded bg-white/10 px-1">F</kbd> lock/unlock,{" "}
-            <kbd className="rounded bg-white/10 px-1">R</kbd> reset. Switch “Cluster” to see status
-            or tag groupings.
-          </p>
-        </div>
-      </div>
       {rewindRange && rewindRange.end > rewindRange.start ? (
         <div className="mx-auto mt-4 w-full max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/70 px-5 py-4 text-sm text-white shadow-lg shadow-black/30 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3">
