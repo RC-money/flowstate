@@ -10,8 +10,6 @@ type Props = {
   onCardClick: (t: Task) => void;
   onAdd?: (status: Status) => void;
   openTask?: (taskId: string) => void;
-  moveTask?: (taskId: string, next: Status) => void;
-  deleteTask?: (taskId: string) => void;
   titleById?: Record<string, string>;
 };
 
@@ -22,8 +20,6 @@ export default function Column({
   onCardClick,
   onAdd,
   openTask,
-  moveTask,
-  deleteTask,
   titleById,
 }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -105,10 +101,6 @@ export default function Column({
               onCardClick(t);
               openTask?.(t.id);
             }}
-            onEdit={() => openTask?.(t.id)}
-            onMarkDone={() => moveTask?.(t.id, "DONE")}
-            onDelete={() => deleteTask?.(t.id)}
-            onMove={(next) => moveTask?.(t.id, next)}
           />
         ))}
       </div>

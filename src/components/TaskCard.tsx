@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import React from "react";
+import { motion } from "framer-motion";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "../App";
@@ -15,10 +14,6 @@ export interface TaskCardProps {
   tags?: string[];
   depTitles?: string[];
   onClick?: () => void;
-  onEdit?: () => void;
-  onMarkDone?: () => void;
-  onDelete?: () => void;
-  onMove?: (next: Task["status"]) => void;
 }
 
 export default function TaskCard({
@@ -30,62 +25,11 @@ export default function TaskCard({
   tags,
   depTitles,
   onClick,
-  onEdit,
-  onMarkDone,
-  onDelete,
-  onMove,
 }: TaskCardProps) {
   // accent based on column
   const accent =
     status === "TO-DO" ? "#47a3f3" : status === "IN PROGRESS" ? "#f7b84b" : "#4ade80";
 
-  const hasQuickActions = Boolean(onEdit || onMarkDone || onDelete || onMove);
-  const moveButtonRef = useRef<HTMLButtonElement | null>(null);
-  const moveMenuRef = useRef<HTMLDivElement | null>(null);
-  const [isMoveMenuOpen, setMoveMenuOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
-
-  const updateMenuPosition = useCallback(() => {
-    const rect = moveButtonRef.current?.getBoundingClientRect();
-    if (rect) {
-      setMenuPosition({
-        x: rect.left,
-        y: rect.bottom + 8,
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isMoveMenuOpen) return;
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        moveMenuRef.current?.contains(target) ||
-        moveButtonRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setMoveMenuOpen(false);
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMoveMenuOpen(false);
-      }
-    };
-    updateMenuPosition();
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey);
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [isMoveMenuOpen, updateMenuPosition]);
-
-  const statusOptions: Task["status"][] = ["TO-DO", "IN PROGRESS", "DONE"];
 
   // A completed task is never late, so it reads as plain regardless of its date.
   const due = status === "DONE" ? "none" : dueState(dueDate, new Date());
@@ -157,105 +101,6 @@ export default function TaskCard({
         ) : null}
       </div>
 
-      {hasQuickActions ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap justify-end gap-3 rounded-b-[15px] bg-gradient-to-t from-[#12142b] via-[#12142b]/85 to-transparent px-4 pb-4 pt-8 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
-          {onEdit ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdit();
-              }}
-              className="pointer-events-auto rounded-lg border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            >
-              Edit
-            </button>
-          ) : null}
-          {onMove ? (
-            <div className="pointer-events-auto relative">
-              <button
-                type="button"
-                ref={moveButtonRef}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!isMoveMenuOpen) {
-                    updateMenuPosition();
-                  }
-                  setMoveMenuOpen((prev) => !prev);
-                }}
-                className="rounded-lg border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              >
-                Move
-              </button>
-              {typeof document !== "undefined" && menuPosition
-                ? createPortal(
-                    <AnimatePresence>
-                      {isMoveMenuOpen ? (
-                        <motion.div
-                          ref={moveMenuRef}
-                          initial={{ opacity: 0, scale: 0.95, y: 8 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, y: 8 }}
-                          transition={{ duration: 0.18, ease: "easeOut" }}
-                          className="fixed z-50 min-w-[180px] rounded-2xl border border-white/10 bg-[#050B18]/95 p-2 shadow-2xl shadow-black/60 backdrop-blur"
-                          style={{ left: menuPosition.x, top: menuPosition.y }}
-                        >
-                          {statusOptions.map((option) => {
-                            const active = option === status;
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setMoveMenuOpen(false);
-                                  onMove(option);
-                                }}
-                                className={[
-                                  "w-full rounded-xl px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide transition",
-                                  active
-                                    ? "bg-white/10 text-white"
-                                    : "text-slate-300 hover:bg-white/10",
-                                ].join(" ")}
-                              >
-                                {option}
-                              </button>
-                            );
-                          })}
-                        </motion.div>
-                      ) : null}
-                    </AnimatePresence>,
-                    document.body
-                  )
-                : null}
-            </div>
-          ) : null}
-          {onMarkDone && status !== "DONE" ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onMarkDone();
-              }}
-              className="pointer-events-auto rounded-lg border border-emerald-300/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:border-emerald-200 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60"
-            >
-              Mark Done
-            </button>
-          ) : null}
-          {onDelete ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete();
-              }}
-              className="pointer-events-auto rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-200 transition hover:border-rose-200 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300/60"
-            >
-              Delete
-            </button>
-          ) : null}
-        </div>
-      ) : null}
     </motion.div>
   );
 }

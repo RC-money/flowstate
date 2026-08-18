@@ -9,7 +9,6 @@ interface BoardProps {
   onAdd?: (status: Status) => void;
   onOpenTask?: (taskId: string) => void;
   onMoveTask?: (taskId: string, next: Status) => void;
-  onDeleteTask?: (taskId: string) => void;
   onAddTask?: () => void;
 }
 
@@ -19,7 +18,6 @@ export default function Board({
   onAdd,
   onOpenTask,
   onMoveTask,
-  onDeleteTask,
   onAddTask,
 }: BoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
@@ -83,8 +81,6 @@ export default function Board({
           onCardClick={handleCardSelection}
           onAdd={onAdd}
           openTask={onOpenTask}
-          moveTask={onMoveTask}
-          deleteTask={onDeleteTask}
         />
       ))}
     </div>

@@ -36,7 +36,6 @@ import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
 import { useObserverEngine } from "./engine/observer/hooks";
 import { useCosmicEvents } from "./engine/events";
-import { useJester } from "./engine/council";
 import { useBiome } from "./engine/biomes";
 import Observatory from "./components/Observatory";
 import { useCelestialStructures } from "./hooks/useCelestialStructures";
@@ -187,21 +186,12 @@ function AppShell() {
     },
     [addTether, pushToast]
   );
-  const { activeEvent, alertsEnabled: cosmicAlertsEnabled } = useCosmicEvents({
+  useCosmicEvents({
     metrics: {
       avgHeat: biomeMetrics.avgHeat,
       avgEntropy: biomeMetrics.avgEntropy,
       tetherCount: tethers.length,
       constellationCount: constellations.length,
-    },
-  });
-  useJester({
-    engine: observerEngine,
-    tasks,
-    setTasks,
-    onChallenge: (task) => {
-      const title = task.title || "this task";
-      pushToast(`Jester: Is ${title} really your universe’s center? Prove it.`, "warn");
     },
   });
 
@@ -234,11 +224,6 @@ function AppShell() {
   }, [observerEngine, constellations]);
 
 
-  useEffect(() => {
-    if (activeEvent && cosmicAlertsEnabled) {
-      pushToast(activeEvent.message, "warn");
-    }
-  }, [activeEvent, cosmicAlertsEnabled, pushToast]);
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
@@ -645,7 +630,6 @@ function AppShell() {
                 onAdd={(status) => handleAddTask(status, "click")}
                 onOpenTask={handleOpenTaskById}
                 onMoveTask={(taskId, next) => handleMoveTask(taskId, next, "menu")}
-                onDeleteTask={handleDeleteTask}
               />
               <DragOverlay
                 dropAnimation={{ duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }}
