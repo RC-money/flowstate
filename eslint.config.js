@@ -19,5 +19,10 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Toast exports useToast and the biome context exports useBiome alongside
+      // their providers -- deliberate co-location, so allow it.
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true, allowExportNames: ['useToast', 'useBiome'] }],
+    },
   },
 ])

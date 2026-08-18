@@ -1,5 +1,4 @@
 import { getTemporalEngine } from "../temporal";
-import type { CelestialKind } from "../../types/celestial";
 import type {
   ActiveCosmicEvent,
   CosmicEventContext,
@@ -17,10 +16,6 @@ const css = (name: string, value: string | null) => {
   }
 };
 
-const withTemporal = (fn: (kind: CelestialKind, heat: number, momentum: number) => void) => {
-  const engine = getTemporalEngine();
-  return (kind: CelestialKind, heat: number, momentum: number) => fn.call(engine, kind, heat, momentum);
-};
 
 const TEMPORAL_CONTEXT: CosmicEventContext = {
   setCssVar: css,

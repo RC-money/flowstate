@@ -74,7 +74,6 @@ const clamp01 = (value: number): number => clamp(value, 0, 1);
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
-const vectorLength = (vector: Vector2): number => Math.hypot(vector.x, vector.y);
 
 const pseudoRandom = (seed: number): number => {
   const x = Math.sin(seed) * 10000;
@@ -474,9 +473,9 @@ class OrbitalPhysicsForce {
   private forceFn: D3Force<PhysicsNode>;
 
   constructor() {
-    const force: D3Force<PhysicsNode> = ((alpha: number) => {
+    const force: D3Force<PhysicsNode> = (() => {
       if (this.suspended || !this.nodes.length) return;
-      this.step(alpha);
+      this.step();
     }) as D3Force<PhysicsNode>;
     force.initialize = (nodes: PhysicsNode[]) => {
       this.nodes = nodes;
@@ -550,7 +549,7 @@ class OrbitalPhysicsForce {
     return state;
   }
 
-  private step(alpha: number): void {
+  private step(): void {
     const now = nowMs();
     const delta = clamp((now - this.lastTimestamp) / 1000, 1 / 120, 0.08);
     this.lastTimestamp = now;

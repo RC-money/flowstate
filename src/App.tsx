@@ -269,7 +269,7 @@ function AppShell() {
       type: "constellation_snapshot",
       timestamp: Date.now(),
       payload: { constellations },
-    } as any);
+    } as unknown as Parameters<typeof observerEngine.ingestEvent>[0]);
   }, [observerEngine, constellations]);
 
   const darkForestCount = useMemo(

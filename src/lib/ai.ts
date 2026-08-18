@@ -1,12 +1,4 @@
 import { type Task } from "../hooks/useLocalTasks";
-import {
-  analyzeStrangeLoop,
-  EMPTY_STRANGE_LOOP_ANALYSIS,
-  type IntentEchoProfile,
-  type StrangeLoopAnalysis,
-  type StrangeLoopContext,
-} from "./strangeLoopEngine";
-
 const delay = (ms: number) =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -47,23 +39,3 @@ export const rag = {
     }, []);
   },
 };
-
-export async function runStrangeLoopEngine(
-  context: StrangeLoopContext,
-  previousIntentEcho?: IntentEchoProfile
-): Promise<StrangeLoopAnalysis> {
-  return withSafety(async () => {
-    await delay(350 + Math.random() * 250);
-    return analyzeStrangeLoop(context, previousIntentEcho);
-  }, EMPTY_STRANGE_LOOP_ANALYSIS);
-}
-
-export type {
-  StrangeLoopContext,
-  StrangeLoopAnalysis,
-  RecursionInsight,
-  ParadoxInsight,
-  IntentEchoProfile as StrangeLoopIntentEchoProfile,
-  MagnetismMatrix,
-  StrangeLoopQuestion,
-} from "./strangeLoopEngine";

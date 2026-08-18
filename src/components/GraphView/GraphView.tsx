@@ -44,11 +44,11 @@ type GraphPreset = "planning" | "focus";
 type LegendKey = (typeof legendSwatches)[number]["label"];
 const LEGEND_KEYS = legendSwatches.map((swatch) => swatch.label) as LegendKey[];
 const LEGEND_KEY_SET = new Set<LegendKey>(LEGEND_KEYS);
-type Debounced<T extends (...args: any[]) => void> = ((...args: Parameters<T>) => void) & {
+type Debounced<T extends (...args: never[]) => void> = ((...args: Parameters<T>) => void) & {
   cancel: () => void;
 };
 
-const debounce = <T extends (...args: any[]) => void>(fn: T, delay = 75): Debounced<T> => {
+const debounce = <T extends (...args: never[]) => void>(fn: T, delay = 75): Debounced<T> => {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   const debounced = ((...args: Parameters<T>) => {
     if (timeout) {
@@ -240,7 +240,8 @@ const loadStoredPrefs = (): GraphPreferences => {
       if (parsed && typeof parsed === "object") {
         const candidate = parsed as Partial<GraphPreferences> & { legendKeys?: unknown };
         const sanitizedLegendKeys = sanitizeLegendKeys(candidate.legendKeys);
-        const { legendKeys: _ignored, ...rest } = candidate;
+        const rest = { ...candidate };
+        delete rest.legendKeys;
         return {
           ...DEFAULT_GRAPH_PREFS,
           ...(rest as GraphPreferences),
@@ -1011,7 +1012,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       partial.clusterMode !== graphPrefs.clusterMode;
     const layoutValuesChanged =
       typeof partial.cohesion === "number" || typeof partial.spacing === "number";
-    let requiresReheat = changeCluster || layoutValuesChanged;
+    const requiresReheat = changeCluster || layoutValuesChanged;
     if (layoutValuesChanged) {
       if (typeof partial.cohesion === "number") {
         setStrongForce(-Math.abs(partial.cohesion));

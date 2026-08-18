@@ -51,7 +51,7 @@ export function logEvent(evt: AnalyticsEvent): void {
     typeof import.meta !== "undefined" &&
     Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
   if (dev) {
-    // eslint-disable-next-line no-console
+     
     console.info("[analytics]", evt);
   } else if (typeof window !== "undefined") {
     window.dispatchEvent(

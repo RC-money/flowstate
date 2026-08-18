@@ -37,7 +37,7 @@ export default function Board({
     (status: Status) => {
       if (!selectedCardId) return;
       onMoveTask?.(selectedCardId, status);
-      // eslint-disable-next-line no-console
+       
       console.info("Move", selectedCardId, "to", status);
       window.dispatchEvent(
         new CustomEvent("flowstate:toast", {

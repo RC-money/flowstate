@@ -22,7 +22,6 @@ const KIND_META: Record<CelestialKind, { label: string; description: string }> =
   "gas-giant": { label: "Gas Giant", description: "Massive program, layered and slow." },
 };
 
-const CLARIFY_OPTIONS: CelestialKind[] = ["sun", "moon", "asteroid"];
 
 const actionVerbs = ["ship", "launch", "deliver", "architect", "build", "deploy", "rewrite", "design"];
 const reflectiveWords = ["review", "reflect", "journal", "learn", "study", "draft summary", "retro"];

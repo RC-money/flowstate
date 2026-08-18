@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { Task } from "../../hooks/useLocalTasks";
 import type { ObserverEngineCore } from "../observer/observerEngine";
 
