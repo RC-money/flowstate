@@ -59,6 +59,9 @@ export default function Board({
     onSetStatus: handleStatusHotkey,
   });
 
+  const titleById: Record<string, string> = {};
+  for (const t of tasks) titleById[t.id] = t.title;
+
   const columns = [
     { id: "TO-DO", title: "TO-DO" },
     { id: "IN PROGRESS", title: "IN PROGRESS" },
@@ -76,6 +79,7 @@ export default function Board({
           id={col.id}
           title={col.title}
           cards={tasks.filter((t) => t.status === col.id)}
+          titleById={titleById}
           onCardClick={handleCardSelection}
           onAdd={onAdd}
           openTask={onOpenTask}

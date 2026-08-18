@@ -12,6 +12,7 @@ type Props = {
   openTask?: (taskId: string) => void;
   moveTask?: (taskId: string, next: Status) => void;
   deleteTask?: (taskId: string) => void;
+  titleById?: Record<string, string>;
 };
 
 export default function Column({
@@ -23,6 +24,7 @@ export default function Column({
   openTask,
   moveTask,
   deleteTask,
+  titleById,
 }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -34,12 +36,8 @@ export default function Column({
     }
   };
 
-  const lineFrom =
-    id === "TO-DO"
-      ? "from-cyan-400/60"
-      : id === "IN PROGRESS"
-      ? "from-indigo-400/60"
-      : "from-emerald-400/60";
+  const accent =
+    id === "TO-DO" ? "#47a3f3" : id === "IN PROGRESS" ? "#f7b84b" : "#4ade80";
 
   return (
     <section
@@ -48,10 +46,9 @@ export default function Column({
       onKeyDown={handleKeyDown}
       className={[
         "w-full",
-        "rounded-2xl border border-white/10 bg-transparent",
-        "p-5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
-        "data-[focused=true]:border-cyan-400/40 data-[focused=true]:bg-white/5",
-        isOver ? "bg-white/8" : "",
+        "rounded-[20px] border border-[rgba(165,175,255,0.07)] bg-transparent",
+        "p-4 pb-5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7c83ff]/60",
+        isOver ? "border-[rgba(165,175,255,0.34)] bg-[rgba(124,131,255,0.09)]" : "",
       ].join(" ")}
       data-focused="false"
       onFocus={(event) => {
@@ -61,34 +58,37 @@ export default function Column({
         event.currentTarget.dataset.focused = "false";
       }}
     >
-      <header className="mb-4">
+      <header className="mb-3.5">
         <h3
-          className={[
-            "text-sm font-bold uppercase tracking-wider",
-            id === "TO-DO" ? "text-cyan-300" : id === "IN PROGRESS" ? "text-indigo-300" : "text-emerald-300",
-          ].join(" ")}
+          className="font-mono text-xs font-bold uppercase tracking-[0.16em]"
+          style={{ color: accent }}
         >
           {title}
         </h3>
-        <div className={`mt-2 h-[3px] w-32 rounded bg-gradient-to-r ${lineFrom} to-transparent`} />
+        <div
+          className="mt-2 h-[3px] w-28 rounded"
+          style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }}
+        />
+        <p className="mt-1.5 font-mono text-[11px] tabular-nums text-[#6b7799]">
+          {cards.length} {cards.length === 1 ? "task" : "tasks"}
+        </p>
         <button
           type="button"
           onClick={() => onAdd?.(id)}
           aria-label={`Add task to ${title}`}
-          className="mt-3 inline-flex items-center gap-1 rounded-xl border border-white/5 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/10"
+          className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[rgba(165,175,255,0.14)] bg-[rgba(165,175,255,0.05)] px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[#c9d0ff] transition hover:border-[rgba(165,175,255,0.4)] hover:bg-[rgba(165,175,255,0.12)] hover:text-white"
         >
-          <span className="text-base leading-none">+</span>
-          New task
+          + New task
           <span
             aria-hidden="true"
-            className="ml-2 rounded-md border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-300"
+            className="rounded-md border border-[rgba(165,175,255,0.2)] px-1.5 py-0.5 text-[9.5px] text-[#6b7799]"
           >
             N
           </span>
         </button>
       </header>
 
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {cards.map((t) => (
           <Card
             key={t.id}
@@ -96,6 +96,11 @@ export default function Column({
             title={t.title}
             status={t.status}
             dueDate={t.dueDate}
+            description={t.description}
+            tags={t.tags}
+            depTitles={(t.dependsOn ?? [])
+              .map((depId) => titleById?.[depId])
+              .filter((x): x is string => Boolean(x))}
             onClick={() => {
               onCardClick(t);
               openTask?.(t.id);

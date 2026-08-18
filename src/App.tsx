@@ -23,6 +23,8 @@ import TaskModal from "./components/TaskModal";
 // bundle and the app opens on the board -- pay for the galaxy when visited.
 const GraphView = React.lazy(() => import("./components/GraphView/GraphView"));
 import NoiseOverlay from "./components/NoiseOverlay";
+import AmbientStars from "./components/AmbientStars";
+import StatusBar from "./components/StatusBar";
 import { useHotkeys } from "./hooks/useHotkeys";
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
@@ -116,6 +118,7 @@ export default function App() {
           }}
         >
           <NoiseOverlay />
+          <AmbientStars />
           <AppShell />
         </div>
       </BiomeProvider>
@@ -596,24 +599,23 @@ function AppShell() {
           </React.Suspense>
         </div>
       ) : null}
-      <main className="mx-auto max-w-screen-2xl px-4 py-8 text-white">
-        <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-baseline gap-4">
-            <h1 className="sr-only">Flowstate</h1>
-            <p
-              aria-hidden="true"
-              className="text-2xl font-extrabold tracking-[0.18em] text-white"
-            >
-              FLOWSTATE
-            </p>
-            <p className="hidden text-sm text-[#8aa0b8] sm:block">Your tasks, in motion.</p>
-          </div>
+      <main className="relative z-10 mx-auto max-w-screen-2xl px-4 py-8 text-white">
+        <header className="mb-7 text-center">
+          <h1 className="sr-only">Flowstate</h1>
+          <p
+            aria-hidden="true"
+            className="bg-gradient-to-br from-white via-[#c9d0ff] to-[#7c83ff] bg-clip-text text-4xl font-extrabold tracking-[0.16em] text-transparent sm:text-5xl"
+            style={{ filter: "drop-shadow(0 0 26px rgba(124,131,255,0.4))" }}
+          >
+            FLOWSTATE
+          </p>
+          <p className="mt-2 text-[15px] text-[#9aa6c4]">Your tasks, in motion.</p>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
             <div
               role="group"
               aria-label="Select view"
-              className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm"
+              className="inline-flex gap-1 rounded-2xl border border-[rgba(165,175,255,0.14)] bg-[rgba(9,10,25,0.5)] p-1 backdrop-blur-md"
             >
               {(["board", "graph"] as const).map((mode) => {
                 const isActive = view === mode;
@@ -623,8 +625,10 @@ function AppShell() {
                     type="button"
                     aria-pressed={isActive}
                     onClick={() => handleViewChange(mode)}
-                    className={`rounded-xl px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
-                      isActive ? "bg-white text-[#0B1220]" : "text-[#8aa0b8] hover:text-white"
+                    className={`rounded-xl px-5 py-2 font-mono text-[11.5px] font-semibold uppercase tracking-[0.09em] transition ${
+                      isActive
+                        ? "bg-gradient-to-br from-[#5b5cf0] to-[#7c83ff] text-white shadow-[0_0_22px_rgba(124,131,255,0.4)]"
+                        : "text-[#9aa6c4] hover:text-white"
                     }`}
                   >
                     {mode === "board" ? "Board" : "Galaxy"}
@@ -636,7 +640,7 @@ function AppShell() {
             <button
               type="button"
               onClick={handlePaletteOpen}
-              className="rounded-xl border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+              className="rounded-xl border border-[rgba(165,175,255,0.14)] bg-[rgba(165,175,255,0.05)] px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[#c9d0ff] transition hover:border-[rgba(165,175,255,0.4)] hover:bg-[rgba(165,175,255,0.12)] hover:text-white"
             >
               &#8984;K
             </button>
@@ -645,9 +649,8 @@ function AppShell() {
               type="button"
               onClick={() => setObservatoryOpen(true)}
               aria-expanded={observatoryOpen}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+              className="rounded-xl border border-[rgba(165,175,255,0.14)] bg-[rgba(165,175,255,0.05)] px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[#c9d0ff] transition hover:border-[rgba(165,175,255,0.4)] hover:bg-[rgba(165,175,255,0.12)] hover:text-white"
             >
-              <span aria-hidden="true">&#9881;</span>
               Settings
             </button>
           </div>
@@ -703,6 +706,8 @@ function AppShell() {
           )}
         </div>
 
+
+        <StatusBar tasks={visibleTasks} />
       </main>
 
       <input

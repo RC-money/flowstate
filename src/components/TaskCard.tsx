@@ -11,6 +11,9 @@ export interface TaskCardProps {
   title: string;
   status: Task["status"];
   dueDate?: string;
+  description?: string;
+  tags?: string[];
+  depTitles?: string[];
   onClick?: () => void;
   onEdit?: () => void;
   onMarkDone?: () => void;
@@ -23,6 +26,9 @@ export default function TaskCard({
   title,
   status,
   dueDate,
+  description,
+  tags,
+  depTitles,
   onClick,
   onEdit,
   onMarkDone,
@@ -31,11 +37,7 @@ export default function TaskCard({
 }: TaskCardProps) {
   // accent based on column
   const accent =
-    status === "TO-DO"
-      ? "#22d3ee" // cyan-400
-      : status === "IN PROGRESS"
-      ? "#818cf8" // indigo-400
-      : "#10b981"; // emerald-500
+    status === "TO-DO" ? "#47a3f3" : status === "IN PROGRESS" ? "#f7b84b" : "#4ade80";
 
   const hasQuickActions = Boolean(onEdit || onMarkDone || onDelete || onMove);
   const moveButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -93,8 +95,8 @@ export default function TaskCard({
   const dragMotionStyle = {
     transform: transform ? CSS.Translate.toString(transform) : undefined,
     opacity: isDragging ? 0 : 1,
-    border: `1px solid ${accent}33`,
-    boxShadow: `0 0 0 rgba(0,0,0,0)`,
+    border: "1px solid rgba(165,175,255,0.14)",
+    boxShadow: "0 0 0 rgba(0,0,0,0)",
   };
 
   return (
@@ -102,33 +104,61 @@ export default function TaskCard({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className="group relative select-none rounded-xl bg-[#0f172a]/90 px-5 pt-5 pb-24 backdrop-blur-sm transition-all duration-200 ease-out hover:scale-[1.02]"
+      className="group relative select-none rounded-[15px] bg-[rgba(18,20,43,0.66)] px-4 pb-4 pt-3.5 backdrop-blur-md transition-all duration-200 ease-out"
       layout
       whileTap={{ scale: 0.97 }}
       transition={{ type: "spring", stiffness: 250, damping: 20 }}
       onClick={onClick}
       style={dragMotionStyle}
       whileHover={{
-        scale: 1.02,
-        boxShadow: `0 0 25px ${accent}44`,
+        y: -2,
+        boxShadow: `0 12px 30px rgba(5,7,15,0.6), 0 0 30px rgba(124,131,255,0.4)`,
       }}
     >
-      <div className="relative z-10">
-        <h4 className="mb-1 text-lg font-semibold">{title}</h4>
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs uppercase tracking-wide text-slate-500">{status}</p>
-          {due !== "none" ? (
-            <span
-              className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${DUE_TONES[due]}`}
-            >
-              {formatDueLabel(dueDate, new Date())}
-            </span>
-          ) : null}
-        </div>
+      <span
+        aria-hidden="true"
+        className={[
+          "absolute right-3.5 top-3.5 h-[7px] w-[7px] rounded-full",
+          status === "IN PROGRESS" ? "animate-pulse" : "",
+        ].join(" ")}
+        style={{ background: accent, boxShadow: `0 0 12px ${accent}` }}
+      />
+      <div className="relative z-10 pr-5">
+        <h4 className="text-[15.5px] font-medium leading-snug text-[#e5e8ff]">{title}</h4>
+        {description ? (
+          <p className="mt-1.5 line-clamp-2 text-[13.5px] leading-snug text-[#9aa6c4]">{description}</p>
+        ) : null}
+        {(tags?.length || depTitles?.length || due !== "none") ? (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {due !== "none" ? (
+              <span
+                className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${DUE_TONES[due]}`}
+              >
+                {formatDueLabel(dueDate, new Date())}
+              </span>
+            ) : null}
+            {(tags ?? []).map((tag) => (
+              <span
+                key={tag}
+                className="rounded-md border border-[rgba(165,175,255,0.16)] bg-[rgba(124,131,255,0.13)] px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.07em] text-[#a5afff]"
+              >
+                {tag}
+              </span>
+            ))}
+            {(depTitles ?? []).map((dep) => (
+              <span
+                key={dep}
+                className="rounded-md border border-[rgba(165,175,255,0.16)] bg-[rgba(124,131,255,0.13)] px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.07em] text-[#a5afff]"
+              >
+                &#8627; {dep.length > 18 ? `${dep.slice(0, 18)}…` : dep}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {hasQuickActions ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap justify-end gap-3 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent px-5 pb-6 pt-6 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap justify-end gap-3 rounded-b-[15px] bg-gradient-to-t from-[#12142b] via-[#12142b]/85 to-transparent px-4 pb-4 pt-8 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
           {onEdit ? (
             <button
               type="button"
