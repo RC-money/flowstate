@@ -88,6 +88,18 @@ describe("replayLog", () => {
   });
 });
 
+describe("ether replay", () => {
+  test("rewinding before the ether moment restores the card", () => {
+    const current = [task("a", "DONE", { completedAt: T0 + 2 * MIN, etheredAt: T0 + 10 * MIN })];
+    const log: TaskLogEvent[] = [
+      { t: T0 + 10 * MIN, taskId: "a", kind: "ethered" },
+    ];
+    const before = replayLog(log, current, T0 + 5 * MIN);
+    expect(before[0].etheredAt).toBeUndefined();
+    expect(before[0].completedAt).toBe(T0 + 2 * MIN);
+  });
+});
+
 describe("logTimeRange", () => {
   test("returns null for an empty log", () => {
     expect(logTimeRange([])).toBeNull();

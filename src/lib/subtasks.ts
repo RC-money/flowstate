@@ -8,7 +8,12 @@ export interface Subtask {
   title: string;
   done: boolean;
   completedAt?: number;
+  /** Which moon sprite orbits the parent for this subtask (0..MOON_COUNT-1). */
+  moon?: number;
 }
+
+/** Seven rendered moon models live in src/assets/moons. */
+export const MOON_COUNT = 7;
 
 export const subtaskProgress = (subtasks: Subtask[] | undefined): { done: number; total: number } => {
   if (!subtasks?.length) return { done: 0, total: 0 };
@@ -35,6 +40,8 @@ export const addSubtask = (subtasks: Subtask[], title: string): Subtask[] => {
       id: `st_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
       title: trimmed,
       done: false,
+      // Which moon you get is luck -- assigned once at birth, stable after.
+      moon: Math.floor(Math.random() * MOON_COUNT),
     },
   ];
 };
@@ -55,6 +62,9 @@ export const normalizeSubtasks = (raw: unknown): Subtask[] | undefined => {
       title: candidate.title,
       done: Boolean(candidate.done),
       ...(typeof candidate.completedAt === "number" ? { completedAt: candidate.completedAt } : {}),
+      ...(typeof candidate.moon === "number" && candidate.moon >= 0 && candidate.moon < MOON_COUNT
+        ? { moon: Math.floor(candidate.moon) }
+        : {}),
     });
   }
   return cleaned;

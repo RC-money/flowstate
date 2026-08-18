@@ -139,7 +139,11 @@ function AppShell() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
   const { engine: observerEngine } = useObserverEngine({ tasks });
-  const visibleTasks = useMemo(() => tasks.filter((task) => !task.darkForest), [tasks]);
+  const visibleTasks = useMemo(
+    () => tasks.filter((task) => !task.darkForest && task.etheredAt === undefined),
+    [tasks]
+  );
+  const etherealTasks = useMemo(() => tasks.filter((task) => task.etheredAt !== undefined), [tasks]);
   const darkForestTasks = useMemo(() => tasks.filter((task) => task.darkForest), [tasks]);
 
   useEffect(() => {
@@ -265,6 +269,19 @@ function AppShell() {
       if (nextTask) handleEditTask(nextTask);
     },
     [tasksById, handleEditTask]
+  );
+
+  const handleSendToEther = useCallback(
+    (taskId: string) => {
+      const task = tasksById[taskId];
+      if (!task || task.status !== "DONE") return;
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? touchTask({ ...t, etheredAt: Date.now() }) : t))
+      );
+      appendLogEvent({ t: Date.now(), taskId, kind: "ethered", title: task.title });
+      pushToast("It shines in the galaxy now.", "success");
+    },
+    [pushToast, setTasks, tasksById]
   );
 
   const handleRestoreFromDarkForest = useCallback(
@@ -649,6 +666,7 @@ function AppShell() {
             >
               <GraphView
                 tasks={visibleTasks}
+                etherealTasks={etherealTasks}
                 onOpenTask={handleOpenTaskById}
                 onCreateTether={handleCreateTether}
                 onConstellationsChange={setConstellations}
@@ -684,6 +702,7 @@ function AppShell() {
           onMove={(taskId, next) => handleMoveTask(taskId, next, "menu")}
           onMarkDone={(taskId) => handleMoveTask(taskId, "DONE", "menu")}
           onDelete={handleDeleteTask}
+          onEther={handleSendToEther}
         />
       ) : null}
 

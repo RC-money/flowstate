@@ -9,7 +9,7 @@ export interface TaskLogEvent {
   /** Epoch ms. */
   t: number;
   taskId: string;
-  kind: "created" | "moved" | "completed" | "deleted" | "restored" | "edited" | "archived";
+  kind: "created" | "moved" | "completed" | "deleted" | "restored" | "edited" | "archived" | "ethered";
   from?: TaskStatus;
   to?: TaskStatus;
   /** Title snapshot so replay can label bodies for since-deleted tasks. */

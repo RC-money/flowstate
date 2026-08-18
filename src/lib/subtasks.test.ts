@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { subtaskProgress, toggleSubtask, addSubtask, removeSubtask, normalizeSubtasks } from "./subtasks";
+import { subtaskProgress, toggleSubtask, addSubtask, removeSubtask, normalizeSubtasks, MOON_COUNT } from "./subtasks";
 import type { Subtask } from "./subtasks";
 
 const NOW = 1_755_500_000_000;
@@ -51,6 +51,14 @@ describe("addSubtask / removeSubtask", () => {
   test("remove drops by id", () => {
     expect(removeSubtask([st("a"), st("b")], "a").map((s) => s.id)).toEqual(["b"]);
   });
+
+  test("every new subtask is dealt a valid moon", () => {
+    for (let i = 0; i < 40; i++) {
+      const [sub] = addSubtask([], `roll ${i}`);
+      expect(sub.moon).toBeGreaterThanOrEqual(0);
+      expect(sub.moon).toBeLessThan(MOON_COUNT);
+    }
+  });
 });
 
 describe("normalizeSubtasks", () => {
@@ -59,6 +67,15 @@ describe("normalizeSubtasks", () => {
     const next = normalizeSubtasks(raw)!;
     expect(next.map((s) => s.id)).toEqual(["a", "b"]);
     expect(next[1].done).toBe(true);
+  });
+
+  test("keeps a valid moon and drops an out-of-range one", () => {
+    const next = normalizeSubtasks([
+      { id: "a", title: "x", done: false, moon: 3 },
+      { id: "b", title: "y", done: false, moon: 99 },
+    ])!;
+    expect(next[0].moon).toBe(3);
+    expect(next[1].moon).toBeUndefined();
   });
 
   test("non-arrays become undefined", () => {

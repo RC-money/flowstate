@@ -83,6 +83,8 @@ export interface GraphPreferences {
 
 interface GraphViewProps {
   tasks: Task[];
+  /** Tasks sent into the Ether: no planet, only their star in the sky. */
+  etherealTasks?: Task[];
   onOpenTask(id: string): void;
   onCreateTether?: (sourceId: string, targetId: string) => void;
   onConstellationsChange?: (constellations: Constellation[]) => void;
@@ -230,6 +232,9 @@ const loadStoredPrefs = (): GraphPreferences => {
           ...DEFAULT_GRAPH_PREFS,
           ...(rest as GraphPreferences),
           ...(sanitizedLegendKeys ? { legendKeys: sanitizedLegendKeys } : {}),
+          // Temporal chains linked same-column tasks by recency -- chronology
+          // masquerading as relationship. The toggle is gone; so is the lie.
+          showTemporal: false,
         };
       }
     }
@@ -244,6 +249,7 @@ type StrengthForce = { strength?: (value: number) => void };
 
 const GraphView: React.FC<GraphViewProps> = ({
   tasks,
+  etherealTasks = [],
   onOpenTask,
   onCreateTether,
   onConstellationsChange,
@@ -284,7 +290,10 @@ const GraphView: React.FC<GraphViewProps> = ({
     [rewindAt, taskLog, tasks]
   );
 
-  const earnedStars = useMemo(() => deriveStars(displayTasks), [displayTasks]);
+  const earnedStars = useMemo(
+    () => deriveStars([...displayTasks, ...etherealTasks]),
+    [displayTasks, etherealTasks]
+  );
   const graphData: GraphData = useMemo(
     () => buildGraphData(displayTasks, graphPrefs),
     [displayTasks, graphPrefs]

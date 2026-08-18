@@ -65,9 +65,11 @@ export const deriveStars = (tasks: Task[]): EarnedStar[] => {
     if (task.status !== "DONE" || task.completedAt === undefined) continue;
 
     const lifespanDays = Math.max(0, task.completedAt - task.createdAt) / DAY;
-    const brightness =
+    let brightness =
       MIN_BRIGHTNESS +
       (1 - MIN_BRIGHTNESS) * Math.min(1, lifespanDays / FULL_BRIGHTNESS_DAYS);
+    // Sent into the Ether: the card is gone, so the star carries everything.
+    if (task.etheredAt !== undefined) brightness = Math.max(brightness, 0.9);
 
     stars.push({
       id: task.id,

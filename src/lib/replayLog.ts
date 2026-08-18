@@ -44,6 +44,10 @@ export const replayLog = (log: TaskLogEvent[], currentTasks: Task[], at: number)
       case "archived":
         if (existing) existing.darkForest = false;
         break;
+      case "ethered":
+        // Before it was sent into the Ether it was still a card on the board.
+        if (existing) delete existing.etheredAt;
+        break;
       case "restored":
         if (existing) existing.darkForest = true;
         break;

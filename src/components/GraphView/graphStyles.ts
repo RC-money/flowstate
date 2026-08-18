@@ -2,6 +2,13 @@ import type { Task } from "../../App";
 import bluePlanetUrl from "../../assets/planets/blue.png";
 import orangePlanetUrl from "../../assets/planets/orange.png";
 import greenPlanetUrl from "../../assets/planets/green.png";
+import moon0 from "../../assets/moons/moon0.png";
+import moon1 from "../../assets/moons/moon1.png";
+import moon2 from "../../assets/moons/moon2.png";
+import moon3 from "../../assets/moons/moon3.png";
+import moon4 from "../../assets/moons/moon4.png";
+import moon5 from "../../assets/moons/moon5.png";
+import moon6 from "../../assets/moons/moon6.png";
 
 // Planet portraits rendered once from the source GLB models (70MB each --
 // never shipped; regenerate via a three.js GLTFLoader scene at 256px if the
@@ -18,6 +25,10 @@ const PLANET_SPRITES: Record<string, HTMLImageElement | null> = {
   "IN PROGRESS": loadSprite(orangePlanetUrl),
   DONE: loadSprite(greenPlanetUrl),
 };
+
+const MOON_SPRITES: Array<HTMLImageElement | null> = [
+  moon0, moon1, moon2, moon3, moon4, moon5, moon6,
+].map(loadSprite);
 import type { GraphLink, GraphNode } from "./graphTransforms";
 
 type ColumnID = Task["status"] extends string ? Task["status"] : string;
@@ -110,26 +121,38 @@ export const drawNode = (
     ctx.shadowColor = palette.glow;
     ctx.shadowBlur = opts.hovered ? radius * 3 : radius * 1.5;
   }
-  // Subtasks orbit as tiny stars: done ones ignite gold, pending stay embers.
-  if (node.subtaskTotal && node.subtaskTotal > 0) {
+  // Subtasks orbit as their own moons -- each was dealt one at random when it
+  // was created. Done moons at full presence with a warm glow; pending ones
+  // are dim silhouettes waiting to be lit.
+  const moons = node.subtaskMoons;
+  if (moons && moons.length > 0) {
     const orbitR = radius * 1.9;
-    for (let i = 0; i < node.subtaskTotal; i += 1) {
-      const angle = (i / node.subtaskTotal) * Math.PI * 2 - Math.PI / 2;
+    moons.forEach((entry, i) => {
+      const angle = (i / moons.length) * Math.PI * 2 - Math.PI / 2;
       const sx = planetCenterX + Math.cos(angle) * orbitR;
       const sy = planetCenterY + Math.sin(angle) * orbitR;
-      const lit = i < (node.subtaskDone ?? 0);
+      const moonR = Math.max(2, radius * 0.32);
+      const sprite = MOON_SPRITES[entry.moon % MOON_SPRITES.length];
+      const ready = Boolean(sprite && sprite.complete && sprite.naturalWidth > 0);
       ctx.save();
-      ctx.globalAlpha = lit ? 0.95 : 0.35;
-      ctx.fillStyle = lit ? "#f7e28b" : "rgba(148,163,184,0.6)";
-      if (lit) {
-        ctx.shadowColor = "rgba(247,226,139,0.9)";
-        ctx.shadowBlur = 6;
+      ctx.globalAlpha = entry.done ? 1 : 0.3;
+      if (entry.done) {
+        ctx.shadowColor = "rgba(247,226,139,0.85)";
+        ctx.shadowBlur = 7;
       }
-      ctx.beginPath();
-      ctx.arc(sx, sy, lit ? 1.8 : 1.2, 0, Math.PI * 2);
-      ctx.fill();
+      if (ready && sprite) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, moonR, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(sprite, sx - moonR, sy - moonR, moonR * 2, moonR * 2);
+      } else {
+        ctx.fillStyle = entry.done ? "#f7e28b" : "rgba(148,163,184,0.6)";
+        ctx.beginPath();
+        ctx.arc(sx, sy, moonR * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
-    }
+    });
   }
 
   ctx.globalAlpha = vitality;

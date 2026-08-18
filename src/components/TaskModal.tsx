@@ -12,6 +12,7 @@ interface TaskModalProps {
   onMove?: (taskId: string, next: Task["status"]) => void;
   onMarkDone?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
+  onEther?: (taskId: string) => void;
 }
 
 const defaultStatus: Task["status"] = "TO-DO";
@@ -25,6 +26,7 @@ export default function TaskModal({
   onMove,
   onMarkDone,
   onDelete,
+  onEther,
 }: TaskModalProps) {
   const [title, setTitle] = useState(initialTask?.title ?? "");
   const [description, setDescription] = useState(initialTask?.description ?? "");
@@ -322,6 +324,18 @@ export default function TaskModal({
               </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3">
+              {status === "DONE" && initialTask?.id && onEther ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onEther(initialTask.id);
+                    onClose();
+                  }}
+                  className="rounded-xl border border-[#c9d0ff]/40 bg-gradient-to-r from-[#5b5cf0]/20 to-[#a5afff]/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#c9d0ff] transition hover:border-[#c9d0ff]/80 hover:text-white"
+                >
+                  &#10024; Send into the Ether
+                </button>
+              ) : null}
               {status !== "DONE" ? (
                 <button
                   type="button"

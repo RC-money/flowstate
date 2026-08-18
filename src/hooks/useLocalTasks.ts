@@ -23,6 +23,8 @@ export interface Task {
   completedAt?: number;
   /** Checklist inside the parent -- never board cards. Stars on the card. */
   subtasks?: Subtask[];
+  /** Epoch ms. Sent into the Ether: gone from the board, shining in the sky. */
+  etheredAt?: number;
 }
 
 /** Stamps a task as changed now. Use at every mutation site. */
