@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import type { EarnedStar } from "../../lib/earnedStars";
 
 export type StarEvent = "add" | "move" | "complete" | null;
 
@@ -10,6 +11,9 @@ interface StarfieldProps {
   nodePositionsRef?: React.MutableRefObject<ReadonlyArray<{ x: number; y: number }>>;
   event?: StarEvent;
   tint?: { h: number; s: number; a: number };
+  /** Stars earned by completing tasks. When provided, the ambient dust dims
+   *  and these carry the sky -- finished work is what shines. */
+  earnedStars?: EarnedStar[];
 }
 
 type Star = {
@@ -65,18 +69,25 @@ const Starfield: React.FC<StarfieldProps> = ({
   nodePositionsRef,
   event,
   tint,
+  earnedStars,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const sizeRef = useRef<{ w: number; h: number; dpr: number }>({ w: 0, h: 0, dpr: 1 });
   const starsRef = useRef<Star[]>([]);
+  const earnedRef = useRef<EarnedStar[] | undefined>(earnedStars);
+  const drawOnceRef = useRef<(() => void) | null>(null);
   const zoomRef = useRef(zoom);
   const targetsRef = useRef<ReadonlyArray<{ x: number; y: number }>>([]);
   const pulseColorRef = useRef<[number, number, number] | null>(null);
   const pulseProgressRef = useRef(0);
   const breathingPhaseRef = useRef(Math.random() * Math.PI * 2);
   const lastTimeRef = useRef<number>(performance.now());
+  useEffect(() => {
+    earnedRef.current = earnedStars;
+  }, [earnedStars]);
+
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -144,13 +155,21 @@ const Starfield: React.FC<StarfieldProps> = ({
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       starsRef.current = createStars(w, h);
+      // Setting canvas.width wipes the bitmap; when the animation loop is
+      // paused (hidden tab, reduced motion) nothing would repaint it.
+      if (frameRef.current === null) {
+        drawOnceRef.current?.();
+      }
     };
 
     resize();
     if (!resizeObserverRef.current) {
       resizeObserverRef.current = new ResizeObserver(resize);
     }
-    resizeObserverRef.current.observe(canvas);
+    // Observe the parent: resize() pins explicit pixel dimensions on the
+    // canvas itself, so observing the canvas meant this never fired again
+    // after the first layout and the sky ignored window resizes.
+    resizeObserverRef.current.observe(canvas.parentElement ?? canvas);
 
     const draw = (now: number) => {
       const { w, h } = sizeRef.current;
@@ -164,6 +183,10 @@ const Starfield: React.FC<StarfieldProps> = ({
         : nodePositionsRef?.current ?? [];
 
       const meteorBoost = getMeteorMultiplier();
+
+      const earned = earnedRef.current;
+      // With an earned sky, ambient dust recedes -- what you finished shines.
+      const dustDim = earned && earned.length ? 0.35 : 1;
 
       for (const star of starsRef.current) {
         star.x += star.speed * parallax * meteorBoost;
@@ -204,10 +227,37 @@ const Starfield: React.FC<StarfieldProps> = ({
 
         ctx.beginPath();
         const twinkle = 0.8 + 0.2 * Math.sin(star.twinkle + star.x * 0.01);
-        ctx.globalAlpha = enabled ? clamp(star.alpha * twinkle, 0.1, 0.95) : 0;
+        ctx.globalAlpha = enabled ? clamp(star.alpha * twinkle * dustDim, 0.03, 0.95) : 0;
         ctx.fillStyle = "#ffffff";
         ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
         ctx.fill();
+      }
+
+      if (earned && earned.length && enabled) {
+        for (const es of earned) {
+          const x = es.u * w;
+          const y = es.v * h;
+          const r = 0.9 + es.brightness * 1.4;
+          const tw = 0.85 + 0.15 * Math.sin(now * 0.0011 + es.u * 40);
+
+          ctx.save();
+          // Soft halo, then core; brighter for longer-lived work.
+          const halo = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
+          halo.addColorStop(0, `rgba(199, 210, 254, ${0.35 * es.brightness * tw})`);
+          halo.addColorStop(1, "rgba(199, 210, 254, 0)");
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(x, y, r * 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.globalAlpha = clamp(es.brightness * tw, 0.3, 1);
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
       }
 
       // Pulse overlay
@@ -249,6 +299,8 @@ const Starfield: React.FC<StarfieldProps> = ({
         frameRef.current = null;
       }
     };
+
+    drawOnceRef.current = () => draw(performance.now());
 
     const startAnimation = () => {
       if (prefersReducedMotion || document.hidden) {

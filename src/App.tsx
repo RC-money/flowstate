@@ -27,6 +27,7 @@ import AskFlowPanel from "./components/AskFlowPanel";
 import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
+import { stampCompletion } from "./lib/earnedStars";
 import IntentSurface from "./components/IntentSurface";
 import GenesisForge, { type GenesisPayload } from "./components/GenesisForge";
 import StrangeLoopPanel from "./components/StrangeLoopPanel";
@@ -375,7 +376,9 @@ function AppShell() {
 
       setTasks((prev) =>
         prev.map((task) =>
-          task.id === taskId ? touchTask({ ...task, status: nextStatus }) : task
+          task.id === taskId
+            ? touchTask(stampCompletion({ ...task, status: nextStatus }, nextStatus, Date.now()))
+            : task
         )
       );
       setActiveTask((prev) =>
@@ -431,10 +434,13 @@ function AppShell() {
   const handleSaveTask = useCallback(
     (task: Task) => {
       setTasks((prev) => {
+        const stamped = stampCompletion(task, task.status, Date.now());
         if (modalMode === "new") {
-          return [...prev, task];
+          return [...prev, stamped];
         }
-        return prev.map((t) => (t.id === task.id ? { ...t, ...task } : t));
+        return prev.map((t) =>
+          t.id === task.id ? stampCompletion({ ...t, ...task }, task.status, Date.now()) : t
+        );
       });
       setActiveTask(task);
       setFocusedColumn(task.status);

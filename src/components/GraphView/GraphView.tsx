@@ -29,11 +29,13 @@ import { useTemporalPhysics } from "../../engine/temporal";
 import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
 import type { Constellation, Tether } from "../../types/celestial";
 import { analyzeConstellations } from "../../engine/constellations/analyzer";
+import { deriveStars } from "../../lib/earnedStars";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
   event?: StarfieldEventType | null;
   nodePositions?: NodePosition[];
+  earnedStars?: ReturnType<typeof deriveStars>;
 };
 const EnhancedStarfield = Starfield as React.ComponentType<EnhancedStarfieldProps>;
 
@@ -274,6 +276,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   );
   const isLocked = Boolean(graphPrefs.locked);
 
+  const earnedStars = useMemo(() => deriveStars(tasks), [tasks]);
   const graphData: GraphData = useMemo(
     () => buildGraphData(tasks, graphPrefs),
     [tasks, graphPrefs]
@@ -1310,7 +1313,7 @@ const GraphView: React.FC<GraphViewProps> = ({
 
       <div className="mx-auto w-full max-w-5xl">
         <div
-          className="relative w-full overflow-hidden border border-white/10 bg-[#050B18] shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
+          className="relative w-full overflow-hidden border border-white/10 bg-black shadow-[0_24px_60px_rgba(0,0,0,0.65)]"
           style={{
             borderRadius: "999px",
             clipPath: "ellipse(96% 58% at 50% 50%)",
@@ -1324,6 +1327,7 @@ const GraphView: React.FC<GraphViewProps> = ({
               event={starfieldEvent}
               nodePositions={nodePositions}
               nodePositionsRef={nodePositionsRef}
+              earnedStars={earnedStars}
             />
           </div>
           <div

@@ -18,6 +18,8 @@ export interface Task {
   updatedAt: number;
   /** Calendar day as "YYYY-MM-DD", deliberately not a timestamp. */
   dueDate?: string;
+  /** Epoch ms, stamped on entering DONE. Earns the task's star in the sky. */
+  completedAt?: number;
 }
 
 /** Stamps a task as changed now. Use at every mutation site. */
