@@ -43,7 +43,7 @@ const IntentSurface: React.FC = () => {
           Choose a ritual. The universe will shift its heat, drift, and clustering to match.
         </p>
       </div>
-      <div className="relative z-10 mt-6 grid gap-4 text-left md:grid-cols-3">
+      <div className="relative z-10 mt-6 grid gap-4 text-left">
         {OPTIONS.map((option) => {
           const isActive = option.intent === intent;
           const registry = BIOME_REGISTRY[option.biomeId];

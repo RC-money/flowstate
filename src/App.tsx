@@ -21,7 +21,6 @@ import Card from "./components/Card";
 import TaskModal from "./components/TaskModal";
 import GraphView from "./components/GraphView/GraphView";
 import NoiseOverlay from "./components/NoiseOverlay";
-import Wordmark from "./components/Wordmark";
 import { useHotkeys } from "./hooks/useHotkeys";
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
@@ -40,6 +39,8 @@ import { useCosmicEvents } from "./engine/events";
 import { useJester } from "./engine/council";
 import { useBiome } from "./engine/biomes";
 import PersonaPanel from "./components/PersonaPanel";
+import SignalLine from "./components/SignalLine";
+import Observatory from "./components/Observatory";
 import { PERSONA_ROSTER, usePersona } from "./paradox/council";
 import { useReflectionJournal } from "./hooks/useReflectionJournal";
 import { useCelestialStructures } from "./hooks/useCelestialStructures";
@@ -51,7 +52,6 @@ export type Status = TaskStatus;
 
 type ViewMode = "board" | "graph";
 type ToastVariant = "success" | "warn" | "error";
-type TetherPair = { sourceId: string; targetId: string };
 
 function createBlankTask(status: Status): Task {
   const now = Date.now();
@@ -147,6 +147,8 @@ function AppShell() {
   const [showGraph, setShowGraph] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
+  const [observatoryOpen, setObservatoryOpen] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
   const { engine: observerEngine, insights: observerInsights } = useObserverEngine({ tasks });
   const [entropyLookup, setEntropyLookup] = useState<Record<string, number>>({});
@@ -188,6 +190,8 @@ function AppShell() {
     () => visibleTasks.filter((task) => (entropyLookup[task.id] ?? 0) > 0.8),
     [visibleTasks, entropyLookup]
   );
+
+  const hasDarkForestSignal = darkForestCandidates.length > 0 || darkForestTasks.length > 0;
 
   const pushToast = useCallback(
     (message: string, variant: ToastVariant = "success") => {
@@ -546,6 +550,15 @@ function AppShell() {
         },
       },
       {
+        id: "cmd-observatory",
+        label: "Open Observatory",
+        hint: "O",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          setObservatoryOpen(true);
+        },
+      },
+      {
         id: "cmd-ask-flow",
         label: "Ask Flow (AI panel)",
         run: () => {
@@ -553,8 +566,24 @@ function AppShell() {
           setAskOpen(true);
         },
       },
+      {
+        id: "cmd-export",
+        label: "Export tasks as JSON",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          handleExportTasks();
+        },
+      },
+      {
+        id: "cmd-import",
+        label: "Import tasks from JSON",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          importInputRef.current?.click();
+        },
+      },
     ],
-    [focusedColumn, handleAddTask]
+    [focusedColumn, handleAddTask, handleExportTasks]
   );
 
   const handlePaletteOpen = useCallback(() => {
@@ -590,6 +619,11 @@ function AppShell() {
     [pushToast, setTasks]
   );
 
+  // Only counts signals that are genuinely waiting on the user, so the badge
+  // never nags about an empty drawer.
+  const observatorySignals =
+    darkForestCandidates.length + (strangeLoopQuestion ? 1 : 0) + (activeEvent ? 1 : 0);
+
   return (
     <>
       {showGraph ? (
@@ -598,39 +632,23 @@ function AppShell() {
         </div>
       ) : null}
       <main className="mx-auto max-w-screen-2xl px-4 py-8 text-white">
-        <header className="text-center space-y-4">
-          <div className="flex flex-col items-center gap-3">
+        <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-baseline gap-4">
             <h1 className="sr-only">Flowstate</h1>
-            <div className="hidden min-h-[64px] w-full items-center justify-center sm:flex">
-              <Wordmark />
-            </div>
-            <div className="sm:hidden">
-              <p className="text-3xl font-extrabold tracking-wide text-white">FLOWSTATE</p>
-            </div>
-            <p className="text-[#8aa0b8]">Your tasks, in motion.</p>
+            <p
+              aria-hidden="true"
+              className="text-2xl font-extrabold tracking-[0.18em] text-white"
+            >
+              FLOWSTATE
+            </p>
+            <p className="hidden text-sm text-[#8aa0b8] sm:block">Your tasks, in motion.</p>
           </div>
-        <div className="flex flex-wrap justify-center gap-3">
-          <button
-            type="button"
-            onClick={handlePaletteOpen}
-            className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
-          >
-            ⌘K
-          </button>
-          <button
-            type="button"
-            onClick={() => setAskOpen(true)}
-            className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
-          >
-            Ask Flow
-          </button>
-          <GenesisForge onGenesis={handleGenesisCreate} />
-        </div>
-            <div className="flex justify-center mt-6 mb-4">
-              <div
-                role="group"
-                aria-label="Select view"
-                className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm"
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div
+              role="group"
+              aria-label="Select view"
+              className="inline-flex rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm"
             >
               {(["board", "graph"] as const).map((mode) => {
                 const isActive = view === mode;
@@ -640,67 +658,45 @@ function AppShell() {
                     type="button"
                     aria-pressed={isActive}
                     onClick={() => handleViewChange(mode)}
-                    className={`px-5 py-2 text-sm font-semibold uppercase tracking-wide rounded-xl transition ${
-                      isActive
-                        ? "bg-white text-[#0B1220]"
-                        : "text-[#8aa0b8] hover:text-white"
+                    className={`rounded-xl px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
+                      isActive ? "bg-white text-[#0B1220]" : "text-[#8aa0b8] hover:text-white"
                     }`}
                   >
-                    {mode === "board" ? "Board" : "Graph"}
+                    {mode === "board" ? "Board" : "Galaxy"}
                   </button>
                 );
               })}
             </div>
-            <div className="flex flex-wrap justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleExportTasks}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
-              >
-                <span className="text-base leading-none">⇣</span>
-                Export JSON
-              </button>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10">
-                <span className="text-base leading-none">⇡</span>
-                Import JSON
-                <input
-                  type="file"
-                  accept="application/json"
-                  className="hidden"
-                  onChange={handleImportTasks}
-                />
-              </label>
-            </div>
+
+            <button
+              type="button"
+              onClick={handlePaletteOpen}
+              className="rounded-xl border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+            >
+              &#8984;K
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setObservatoryOpen(true)}
+              aria-expanded={observatoryOpen}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
+            >
+              <span aria-hidden="true">&#9737;</span>
+              Observatory
+              {observatorySignals > 0 ? (
+                <span className="rounded-full bg-white/15 px-1.5 text-[10px] tabular-nums">
+                  {observatorySignals}
+                </span>
+              ) : null}
+            </button>
           </div>
         </header>
 
-        <IntentSurface />
-        <PersonaPanel persona={persona} />
-        <DarkForestPanel
-          candidates={darkForestCandidates}
-          archived={darkForestTasks}
-          onArchive={handleSendToDarkForest}
-          onRestore={handleRestoreFromDarkForest}
-        />
-        <CosmicEventBanner
+        <SignalLine
+          persona={persona}
           event={activeEvent}
-          alertsEnabled={cosmicAlertsEnabled}
-          onToggleAlerts={toggleAlerts}
-        />
-        <StrangeLoopPanel
-          question={strangeLoopQuestion}
-          personaName={persona.name}
-          onRefresh={refreshStrangeLoop}
-          onReflect={handleReflectionSubmit}
-        />
-        <PatternJournal
-          reflections={reflections}
-          personas={Object.values(PERSONA_ROSTER).map((personaMeta) => ({
-            ...personaMeta,
-            rationale: "",
-            questionTemplates: [],
-          }))}
-          constellations={constellations}
+          onOpenObservatory={() => setObservatoryOpen(true)}
         />
 
         <div className="board-wrapper">
@@ -743,6 +739,52 @@ function AppShell() {
           )}
         </div>
       </main>
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={handleImportTasks}
+      />
+
+      <Observatory open={observatoryOpen} onClose={() => setObservatoryOpen(false)}>
+        <IntentSurface />
+        <div className="mt-4">
+          <GenesisForge onGenesis={handleGenesisCreate} />
+        </div>
+        <CosmicEventBanner
+          event={activeEvent}
+          alertsEnabled={cosmicAlertsEnabled}
+          onToggleAlerts={toggleAlerts}
+        />
+        <StrangeLoopPanel
+          question={strangeLoopQuestion}
+          personaName={persona.name}
+          onRefresh={refreshStrangeLoop}
+          onReflect={handleReflectionSubmit}
+        />
+        <PersonaPanel persona={persona} />
+        {hasDarkForestSignal ? (
+          <DarkForestPanel
+            candidates={darkForestCandidates}
+            archived={darkForestTasks}
+            onArchive={handleSendToDarkForest}
+            onRestore={handleRestoreFromDarkForest}
+          />
+        ) : null}
+        {reflections.length ? (
+          <PatternJournal
+            reflections={reflections}
+            personas={Object.values(PERSONA_ROSTER).map((personaMeta) => ({
+              ...personaMeta,
+              rationale: "",
+              questionTemplates: [],
+            }))}
+            constellations={constellations}
+          />
+        ) : null}
+      </Observatory>
 
       {isModalOpen ? (
         <TaskModal
