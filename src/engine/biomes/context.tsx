@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BiomeManager } from "./manager";
 import type { BiomeMetrics, BiomeTokens, UserIntent } from "./types";
 
@@ -49,12 +49,26 @@ export const BiomeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [intent, tokens]);
 
-  const updateMetrics = (partial: Partial<BiomeMetrics>) => {
-    setMetrics((prev) => ({ ...prev, ...partial }));
-  };
+  // Consumers list updateMetrics in effect dependency arrays, so it has to keep
+  // a stable identity — and the reducer has to return the previous object when
+  // nothing moved, otherwise every call re-renders the whole tree.
+  const updateMetrics = useCallback((partial: Partial<BiomeMetrics>) => {
+    setMetrics((prev) => {
+      const next = { ...prev, ...partial };
+      if (next.avgHeat === prev.avgHeat && next.avgEntropy === prev.avgEntropy) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  const value = useMemo(
+    () => ({ tokens, intent, metrics, setIntent, updateMetrics }),
+    [tokens, intent, metrics, updateMetrics]
+  );
 
   return (
-    <BiomeContext.Provider value={{ tokens, intent, metrics, setIntent, updateMetrics }}>
+    <BiomeContext.Provider value={value}>
       {children}
     </BiomeContext.Provider>
   );
