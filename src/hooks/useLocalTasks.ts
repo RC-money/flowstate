@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { normalizeDates } from "../lib/taskDates";
 
 export type TaskStatus = "TO-DO" | "IN PROGRESS" | "DONE";
 export interface Task {
@@ -11,7 +12,19 @@ export interface Task {
   dependsOn?: string[];
   darkForest?: boolean;
   orbitSeed?: { x: number; y: number };
+  /** Epoch ms. Backfilled on load for tasks saved before dates existed. */
+  createdAt: number;
+  /** Epoch ms. Drives the graph's temporal links and orbital decay. */
+  updatedAt: number;
+  /** Calendar day as "YYYY-MM-DD", deliberately not a timestamp. */
+  dueDate?: string;
 }
+
+/** Stamps a task as changed now. Use at every mutation site. */
+export const touchTask = (task: Task, now: number = Date.now()): Task => ({
+  ...task,
+  updatedAt: now,
+});
 
 type Tasks = Task[];
 
@@ -32,12 +45,15 @@ const isTask = (candidate: unknown): candidate is Task => {
 
 const coerceTasks = (payload: unknown): Tasks | null => {
   if (!Array.isArray(payload)) return null;
+  const now = Date.now();
   const next: Task[] = [];
   for (const item of payload) {
     if (!isTask(item)) {
       return null;
     }
-    next.push(item);
+    // Repairs rather than rejects: every board saved before dates existed is
+    // missing these fields, and rejecting would silently reset the user's data.
+    next.push({ ...item, ...normalizeDates(item, now) });
   }
   return next;
 };

@@ -30,12 +30,14 @@ export default function TaskModal({
   const [status, setStatus] = useState<Task["status"]>(
     initialTask?.status ?? defaultStatus
   );
+  const [dueDate, setDueDate] = useState(initialTask?.dueDate ?? "");
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setTitle(initialTask?.title ?? "");
     setDescription(initialTask?.description ?? "");
     setStatus(initialTask?.status ?? defaultStatus);
+    setDueDate(initialTask?.dueDate ?? "");
   }, [initialTask, mode]);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export default function TaskModal({
     event.preventDefault();
     if (saveDisabled) return;
 
+    const now = Date.now();
     const payload: RichTask = {
       id:
         initialTask?.id ??
@@ -63,6 +66,12 @@ export default function TaskModal({
       status,
       title: title.trim(),
       description: description.trim(),
+      createdAt: initialTask?.createdAt ?? now,
+      updatedAt: now,
+      // Always present, so clearing the field actually clears it -- App merges
+      // edits with {...existing, ...payload}, and an omitted key would preserve
+      // the old date instead of removing it.
+      dueDate: dueDate || undefined,
     };
 
     onSave(payload);
@@ -147,6 +156,28 @@ export default function TaskModal({
               className="mt-2 min-h-[120px] w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
               placeholder="Add context, acceptance criteria, or links"
             />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-200">
+            Due date
+            <span className="ml-2 text-xs font-normal text-slate-500">optional</span>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white [color-scheme:dark] focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+              />
+              {dueDate ? (
+                <button
+                  type="button"
+                  onClick={() => setDueDate("")}
+                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:text-white"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
           </label>
         </div>
 

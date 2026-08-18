@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "../App";
+import { dueState, formatDueLabel, DUE_TONES } from "../lib/taskDates";
 
 export interface TaskCardProps {
   id: string;
   title: string;
   status: Task["status"];
+  dueDate?: string;
   onClick?: () => void;
   onEdit?: () => void;
   onMarkDone?: () => void;
@@ -20,6 +22,7 @@ export default function TaskCard({
   id,
   title,
   status,
+  dueDate,
   onClick,
   onEdit,
   onMarkDone,
@@ -82,6 +85,9 @@ export default function TaskCard({
 
   const statusOptions: Task["status"][] = ["TO-DO", "IN PROGRESS", "DONE"];
 
+  // A completed task is never late, so it reads as plain regardless of its date.
+  const due = status === "DONE" ? "none" : dueState(dueDate, new Date());
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
 
   const dragMotionStyle = {
@@ -109,7 +115,16 @@ export default function TaskCard({
     >
       <div className="relative z-10">
         <h4 className="mb-1 text-lg font-semibold">{title}</h4>
-        <p className="text-xs uppercase tracking-wide text-slate-500">{status}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">{status}</p>
+          {due !== "none" ? (
+            <span
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${DUE_TONES[due]}`}
+            >
+              {formatDueLabel(dueDate, new Date())}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {hasQuickActions ? (

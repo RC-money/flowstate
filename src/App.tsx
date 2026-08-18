@@ -27,7 +27,7 @@ import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
 import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
-import { useLocalTasks, type Task, type TaskStatus } from "./hooks/useLocalTasks";
+import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
 import IntentSurface from "./components/IntentSurface";
 import GenesisForge, { type GenesisPayload } from "./components/GenesisForge";
 import StrangeLoopPanel from "./components/StrangeLoopPanel";
@@ -54,20 +54,35 @@ type ToastVariant = "success" | "warn" | "error";
 type TetherPair = { sourceId: string; targetId: string };
 
 function createBlankTask(status: Status): Task {
+  const now = Date.now();
   return {
-    id: `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `t_${now}_${Math.random().toString(36).slice(2, 8)}`,
     title: "",
     description: "",
     status,
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
+const seedTask = (
+  id: string,
+  title: string,
+  status: Status,
+  ageInDays: number
+): Task => {
+  const created = Date.now() - ageInDays * 86_400_000;
+  return { id, title, status, createdAt: created, updatedAt: created };
+};
+
+// Staggered ages so the graph's temporal links and the decay curve have
+// something real to read on a first run.
 const initialTasks: Task[] = [
-  { id: "t1", title: "Create dashboard components", status: "TO-DO" },
-  { id: "t2", title: "Write API documentation", status: "TO-DO" },
-  { id: "t3", title: "Build authentication system", status: "IN PROGRESS" },
-  { id: "t4", title: "Set up CI/CD pipeline", status: "IN PROGRESS" },
-  { id: "t5", title: "Design homepage layout", status: "DONE" },
+  seedTask("t1", "Create dashboard components", "TO-DO", 6),
+  seedTask("t2", "Write API documentation", "TO-DO", 5),
+  seedTask("t3", "Build authentication system", "IN PROGRESS", 4),
+  seedTask("t4", "Set up CI/CD pipeline", "IN PROGRESS", 2),
+  seedTask("t5", "Design homepage layout", "DONE", 1),
 ];
 
 const getTimeOfDay = (): "dawn" | "day" | "dusk" | "night" => {
@@ -332,7 +347,7 @@ function AppShell() {
   const handleSendToDarkForest = useCallback(
     (taskId: string) => {
       setTasks((prev) =>
-        prev.map((task) => (task.id === taskId ? { ...task, darkForest: true } : task))
+        prev.map((task) => (task.id === taskId ? touchTask({ ...task, darkForest: true }) : task))
       );
       pushToast("Archivist: Let it rest in the Dark Forest.", "success");
     },
@@ -342,7 +357,7 @@ function AppShell() {
   const handleRestoreFromDarkForest = useCallback(
     (taskId: string) => {
       setTasks((prev) =>
-        prev.map((task) => (task.id === taskId ? { ...task, darkForest: false } : task))
+        prev.map((task) => (task.id === taskId ? touchTask({ ...task, darkForest: false }) : task))
       );
       pushToast("Archivist: Brought back from the Dark Forest.", "success");
     },
@@ -356,7 +371,7 @@ function AppShell() {
 
       setTasks((prev) =>
         prev.map((task) =>
-          task.id === taskId ? { ...task, status: nextStatus } : task
+          task.id === taskId ? touchTask({ ...task, status: nextStatus }) : task
         )
       );
       setActiveTask((prev) =>

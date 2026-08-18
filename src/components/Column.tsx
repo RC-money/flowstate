@@ -95,6 +95,7 @@ export default function Column({
             id={t.id}
             title={t.title}
             status={t.status}
+            dueDate={t.dueDate}
             onClick={() => {
               onCardClick(t);
               openTask?.(t.id);
