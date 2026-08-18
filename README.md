@@ -1,73 +1,61 @@
-# React + TypeScript + Vite
+# Flowstate
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Your tasks, in motion. A solo task app where your work is a galaxy: tasks are
+planets, finished work becomes stars, and neglect dims things gently instead of
+shouting at you.
 
-Currently, two official plugins are available:
+**Flowstate is deliberately single-user.** Its differentiating features are
+confessional — "I'm overwhelmed" is a literal input — and they only work
+unobserved. Collaboration was considered and rejected, not deferred.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Run it
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm test           # vitest
+npm run lint
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+No backend, no accounts. All state lives in `localStorage` under
+`flowstate:v1:*` keys. Export/Import JSON lives in the ⌘K palette.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## The concepts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+| Concept | What it is | Where it lives |
+|---|---|---|
+| **Board / Galaxy** | The two views: kanban columns, or a force-directed starfield | `components/Board.tsx`, `components/GraphView/` |
+| **Earned stars** | Completing a task earns a permanent star in the galaxy sky; brightness tracks how long the task lived. Positions derive from a hash of the task id — nothing stored. | `lib/earnedStars.ts` |
+| **Orbital decay** | Untouched tasks dim after a 3-day grace period, fully decayed at 14 days. High decay suggests the task for the Dark Forest — never auto-archives. | `lib/orbitalDecay.ts` |
+| **Dark Forest** | Where tasks rest when you admit you're not doing them. Restorable. | `components/DarkForestPanel.tsx` |
+| **Observer** | Engine computing per-task heat/entropy signals from activity | `engine/observer/` *(the live one)* |
+| **Personas / Council** | Seven voices (Mentor, Hunter, Jester…) chosen by your current state | `paradox/council/` *(the live one)* |
+| **Biomes** | The background/accent palette shifts with your declared intent and measured state | `engine/biomes/` |
+| **Strange Loop** | Reflective questions the app asks you; answers land in the Pattern Journal | `engine/strangeLoop/`, `hooks/useReflectionJournal.ts` |
+| **Cosmic events** | Meteor showers etc., derived from aggregate board state | `engine/events/` |
+| **Observatory** | The drawer (top right) holding all ambient panels — the board stays first | `components/Observatory.tsx` |
+| **Intent Surface** | "How do you want to feel today" — input, not decoration; drives biomes | `components/IntentSurface.tsx` |
+
+## Data model notes
+
+- `Task.createdAt` / `updatedAt` are epoch ms. `dueDate` is a `YYYY-MM-DD`
+  calendar day **on purpose** — a timestamp makes a task due the 20th land on
+  the 19th west of Greenwich.
+- `completedAt` stamps on entering DONE, clears on leaving. It's what earns
+  the star.
+- Storage migration **repairs rather than rejects** (`lib/taskDates.ts:
+  normalizeDates`): the loader discards the whole board if one row fails
+  validation, so a strict migration would wipe real data.
+
+## Keyboard
+
+`N` new task · `G` toggle galaxy backdrop · `⌘K` palette (export/import/
+observatory live here) · `Esc` closes things.
+
+## History
+
+The design language is documented in `docs/FLOWSTATE_UI_GUIDELINES.md` —
+still accurate. A full code audit (Aug 2026) with findings and rationale for
+most of the current structure exists as a Claude artifact; the render-loop
+fixes, date model, layout calm-down, and dead-code deletion all trace to it.

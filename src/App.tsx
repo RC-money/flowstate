@@ -19,7 +19,9 @@ import {
 import Board from "./components/Board";
 import Card from "./components/Card";
 import TaskModal from "./components/TaskModal";
-import GraphView from "./components/GraphView/GraphView";
+// Lazy: the graph stack (react-force-graph + d3) is ~two-thirds of the
+// bundle and the app opens on the board -- pay for the galaxy when visited.
+const GraphView = React.lazy(() => import("./components/GraphView/GraphView"));
 import NoiseOverlay from "./components/NoiseOverlay";
 import { useHotkeys } from "./hooks/useHotkeys";
 import CommandPalette, { type Command } from "./components/CommandPalette";
@@ -641,7 +643,9 @@ function AppShell() {
     <>
       {showGraph ? (
         <div className="pointer-events-none fixed inset-0 -z-10">
-              <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} onCreateTether={handleCreateTether} />
+          <React.Suspense fallback={null}>
+            <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} onCreateTether={handleCreateTether} />
+          </React.Suspense>
         </div>
       ) : null}
       <main className="mx-auto max-w-screen-2xl px-4 py-8 text-white">
@@ -741,14 +745,18 @@ function AppShell() {
               </DragOverlay>
             </DndContext>
           ) : (
-            <GraphView
-              tasks={visibleTasks}
-              onOpenTask={handleOpenTaskById}
-              onCreateTether={handleCreateTether}
-              onConstellationsChange={setConstellations}
-              tethers={tethers}
-              constellations={constellations}
-            />
+            <React.Suspense
+              fallback={<div className="min-h-[360px] animate-pulse rounded-3xl border border-white/5 bg-white/[0.02]" />}
+            >
+              <GraphView
+                tasks={visibleTasks}
+                onOpenTask={handleOpenTaskById}
+                onCreateTether={handleCreateTether}
+                onConstellationsChange={setConstellations}
+                tethers={tethers}
+                constellations={constellations}
+              />
+            </React.Suspense>
           )}
         </div>
       </main>
