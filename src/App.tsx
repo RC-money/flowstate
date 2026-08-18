@@ -31,6 +31,7 @@ import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
 import { stampCompletion } from "./lib/earnedStars";
 import { decayLevel, DARK_FOREST_THRESHOLD } from "./lib/orbitalDecay";
+import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
 import GenesisForge, { type GenesisPayload } from "./components/GenesisForge";
 import StrangeLoopPanel from "./components/StrangeLoopPanel";
@@ -43,6 +44,7 @@ import { useCosmicEvents } from "./engine/events";
 import { useJester } from "./engine/council";
 import { useBiome } from "./engine/biomes";
 import PersonaPanel from "./components/PersonaPanel";
+import ConstellationRoster from "./components/ConstellationRoster";
 import SignalLine from "./components/SignalLine";
 import Observatory from "./components/Observatory";
 import { PERSONA_ROSTER, usePersona } from "./paradox/council";
@@ -134,7 +136,7 @@ export default function App() {
 function AppShell() {
   const { show } = useToast();
   const { updateMetrics, intent: biomeIntent, metrics: biomeMetrics } = useBiome();
-  const { tethers, constellations, addTether, setConstellations } = useCelestialStructures();
+  const { tethers, constellations, addTether, setConstellations, renameConstellation } = useCelestialStructures();
   const { reflections, addReflection } = useReflectionJournal();
   const [tasks, setTasks] = useLocalTasks(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -363,9 +365,10 @@ function AppShell() {
       setTasks((prev) =>
         prev.map((task) => (task.id === taskId ? touchTask({ ...task, darkForest: true }) : task))
       );
+      appendLogEvent({ t: Date.now(), taskId, kind: "archived", title: tasksById[taskId]?.title });
       pushToast("Archivist: Let it rest in the Dark Forest.", "success");
     },
-    [pushToast, setTasks]
+    [pushToast, setTasks, tasksById]
   );
 
   const handleRestoreFromDarkForest = useCallback(
@@ -373,9 +376,10 @@ function AppShell() {
       setTasks((prev) =>
         prev.map((task) => (task.id === taskId ? touchTask({ ...task, darkForest: false }) : task))
       );
+      appendLogEvent({ t: Date.now(), taskId, kind: "restored", title: tasksById[taskId]?.title });
       pushToast("Archivist: Brought back from the Dark Forest.", "success");
     },
-    [pushToast, setTasks]
+    [pushToast, setTasks, tasksById]
   );
 
   const handleMoveTask = useCallback(
@@ -397,6 +401,14 @@ function AppShell() {
         prev && prev.id === taskId ? { ...prev, status: nextStatus } : prev
       );
       setFocusedColumn(nextStatus);
+      appendLogEvent({
+        t: Date.now(),
+        taskId,
+        kind: nextStatus === "DONE" ? "completed" : "moved",
+        from: current.status,
+        to: nextStatus,
+        title: current.title,
+      });
       pushToast(`Moved to ${nextStatus}`, "success");
       logEvent({ type: "task:move", method });
     },
@@ -411,10 +423,16 @@ function AppShell() {
       if (draftTask?.id === taskId) {
         closeModal();
       }
+      appendLogEvent({
+        t: Date.now(),
+        taskId,
+        kind: "deleted",
+        title: tasksById[taskId]?.title,
+      });
       pushToast("Task deleted", "warn");
       logEvent({ type: "task:delete" });
     },
-    [closeModal, draftTask, pushToast]
+    [closeModal, draftTask, pushToast, tasksById]
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -454,14 +472,24 @@ function AppShell() {
       setActiveTask(task);
       setFocusedColumn(task.status);
       if (modalMode === "new") {
+        appendLogEvent({ t: Date.now(), taskId: task.id, kind: "created", to: task.status, title: task.title });
         pushToast("Task created", "success");
         logEvent({ type: "task:add", source: lastAddSourceRef.current });
       } else {
+        const before = tasksById[task.id];
+        appendLogEvent({
+          t: Date.now(),
+          taskId: task.id,
+          kind: before && before.status !== task.status && task.status === "DONE" ? "completed" : "edited",
+          from: before?.status,
+          to: task.status,
+          title: task.title,
+        });
         pushToast("Task updated", "success");
       }
       closeModal();
     },
-    [modalMode, closeModal, pushToast]
+    [modalMode, closeModal, pushToast, tasksById]
   );
 
   useEffect(() => {
@@ -628,6 +656,7 @@ function AppShell() {
         orbitSeed: position,
       };
       setTasks((prev) => [...prev, nextTask]);
+      appendLogEvent({ t: Date.now(), taskId: nextTask.id, kind: "created", to: status, title });
       pushToast(`Condensed a new ${kind.toUpperCase()}`, "success");
       logEvent({ type: "task:add", source: "click" });
     },
@@ -786,6 +815,7 @@ function AppShell() {
           onReflect={handleReflectionSubmit}
         />
         <PersonaPanel persona={persona} />
+        <ConstellationRoster constellations={constellations} onRename={renameConstellation} />
         {hasDarkForestSignal ? (
           <DarkForestPanel
             candidates={darkForestCandidates}

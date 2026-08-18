@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Constellation, Tether } from "../types/celestial";
+import { mergeConstellations } from "../engine/constellations/merge";
 
 type StructuresState = {
   tethers: Tether[];
@@ -78,7 +79,20 @@ export const useCelestialStructures = () => {
   }, []);
 
   const setConstellations = useCallback((constellations: Constellation[]) => {
-    setState((prev) => ({ ...prev, constellations }));
+    // Merge so user-given names and ages survive re-analysis.
+    setState((prev) => ({
+      ...prev,
+      constellations: mergeConstellations(prev.constellations, constellations),
+    }));
+  }, []);
+
+  const renameConstellation = useCallback((constellationId: string, name: string) => {
+    setState((prev) => ({
+      ...prev,
+      constellations: prev.constellations.map((c) =>
+        c.id === constellationId ? { ...c, name: name.trim() || undefined } : c
+      ),
+    }));
   }, []);
 
   return {
@@ -87,5 +101,6 @@ export const useCelestialStructures = () => {
     addTether,
     removeTether,
     setConstellations,
+    renameConstellation,
   };
 };
