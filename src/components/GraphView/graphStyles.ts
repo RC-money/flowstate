@@ -1,4 +1,23 @@
 import type { Task } from "../../App";
+import bluePlanetUrl from "../../assets/planets/blue.png";
+import orangePlanetUrl from "../../assets/planets/orange.png";
+import greenPlanetUrl from "../../assets/planets/green.png";
+
+// Planet portraits rendered once from the source GLB models (70MB each --
+// never shipped; regenerate via a three.js GLTFLoader scene at 256px if the
+// art changes). Loaded lazily; the gradient core paints until they arrive.
+const loadSprite = (url: string): HTMLImageElement | null => {
+  if (typeof Image === "undefined") return null;
+  const img = new Image();
+  img.src = url;
+  return img;
+};
+
+const PLANET_SPRITES: Record<string, HTMLImageElement | null> = {
+  "TO-DO": loadSprite(bluePlanetUrl),
+  "IN PROGRESS": loadSprite(orangePlanetUrl),
+  DONE: loadSprite(greenPlanetUrl),
+};
 import type { GraphLink, GraphNode } from "./graphTransforms";
 
 type ColumnID = Task["status"] extends string ? Task["status"] : string;
@@ -71,6 +90,9 @@ export const drawNode = (
   ctx.closePath();
   ctx.restore();
 
+  const sprite = PLANET_SPRITES[statusKey] ?? null;
+  const spriteReady = Boolean(sprite && sprite.complete && sprite.naturalWidth > 0);
+
   const gradient = ctx.createRadialGradient(
     planetCenterX,
     planetCenterY,
@@ -111,13 +133,29 @@ export const drawNode = (
   }
 
   ctx.globalAlpha = vitality;
-  ctx.beginPath();
-  ctx.fillStyle = gradient;
-  ctx.strokeStyle = opts.hovered ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.12)";
-  ctx.lineWidth = opts.hovered ? 1.75 : 1;
-  ctx.arc(planetCenterX, planetCenterY, radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  if (spriteReady && sprite) {
+    // The model portrait, clipped to the body circle so decay dimming and the
+    // hover ring behave identically to the painted planets.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(planetCenterX, planetCenterY, radius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(sprite, planetCenterX - radius, planetCenterY - radius, radius * 2, radius * 2);
+    ctx.restore();
+    ctx.beginPath();
+    ctx.strokeStyle = opts.hovered ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.12)";
+    ctx.lineWidth = opts.hovered ? 1.75 : 1;
+    ctx.arc(planetCenterX, planetCenterY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.fillStyle = gradient;
+    ctx.strokeStyle = opts.hovered ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.12)";
+    ctx.lineWidth = opts.hovered ? 1.75 : 1;
+    ctx.arc(planetCenterX, planetCenterY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
   ctx.globalAlpha = 1;
   ctx.closePath();
   ctx.restore();
