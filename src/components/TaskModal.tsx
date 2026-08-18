@@ -32,6 +32,7 @@ export default function TaskModal({
     initialTask?.status ?? defaultStatus
   );
   const [dueDate, setDueDate] = useState(initialTask?.dueDate ?? "");
+  const [tagsDraft, setTagsDraft] = useState((initialTask?.tags ?? []).join(", "));
   const [subtasks, setSubtasks] = useState<Subtask[]>(initialTask?.subtasks ?? []);
   const [subtaskDraft, setSubtaskDraft] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +42,7 @@ export default function TaskModal({
     setDescription(initialTask?.description ?? "");
     setStatus(initialTask?.status ?? defaultStatus);
     setDueDate(initialTask?.dueDate ?? "");
+    setTagsDraft((initialTask?.tags ?? []).join(", "));
     setSubtasks(initialTask?.subtasks ?? []);
     setSubtaskDraft("");
   }, [initialTask, mode]);
@@ -78,6 +80,17 @@ export default function TaskModal({
       // the old date instead of removing it.
       dueDate: dueDate || undefined,
       subtasks: subtasks.length ? subtasks : undefined,
+      tags: (() => {
+        const parsed = Array.from(
+          new Set(
+            tagsDraft
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+          )
+        );
+        return parsed.length ? parsed : undefined;
+      })(),
     };
 
     onSave(payload);
@@ -161,6 +174,21 @@ export default function TaskModal({
               onChange={(event) => setDescription(event.target.value)}
               className="mt-2 min-h-[120px] w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
               placeholder="Add context, acceptance criteria, or links"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-slate-200">
+            Tags
+            <span className="ml-2 text-xs font-normal text-slate-500">
+              comma separated &mdash; shared tags pull tasks together
+            </span>
+            <input
+              type="text"
+              value={tagsDraft}
+              onChange={(event) => setTagsDraft(event.target.value)}
+              placeholder="design, api"
+              autoComplete="off"
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
             />
           </label>
 
