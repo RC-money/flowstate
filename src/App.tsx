@@ -105,7 +105,7 @@ export default function App() {
         <div
           className="min-h-screen text-white transition-colors"
           style={{
-            backgroundImage: "var(--biome-bg, linear-gradient(135deg,#050B18,#0B1220))",
+            backgroundImage: "var(--biome-bg, linear-gradient(180deg,#090a19,#05070f))",
           }}
         >
           <NoiseOverlay />
