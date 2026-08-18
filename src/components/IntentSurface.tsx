@@ -35,12 +35,9 @@ const IntentSurface: React.FC = () => {
         />
       </div>
       <div className="relative z-10 text-center text-slate-100">
-        <p className="text-sm uppercase tracking-[0.3em] text-white/70">Intent Surface</p>
-        <h2 className="mt-2 text-2xl font-semibold">
-          Let the galaxy feel the way you feel.
-        </h2>
+        <p className="text-sm uppercase tracking-[0.3em] text-white/70">Colors</p>
         <p className="mt-1 text-sm text-white/70">
-          Choose a ritual. The universe will shift its heat, drift, and clustering to match.
+          Pick the palette the galaxy wears.
         </p>
       </div>
       <div className="relative z-10 mt-6 grid gap-4 text-left">

@@ -30,25 +30,15 @@ import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
 import { stampCompletion } from "./lib/earnedStars";
-import { decayLevel, DARK_FOREST_THRESHOLD } from "./lib/orbitalDecay";
 import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
-import GenesisForge, { type GenesisPayload } from "./components/GenesisForge";
-import StrangeLoopPanel from "./components/StrangeLoopPanel";
-import CosmicEventBanner from "./components/CosmicEventBanner";
-import DarkForestPanel from "./components/DarkForestPanel";
-import PatternJournal from "./components/PatternJournal";
 import { useObserverEngine } from "./engine/observer/hooks";
-import { useStrangeLoop } from "./engine/strangeLoop";
 import { useCosmicEvents } from "./engine/events";
 import { useJester } from "./engine/council";
 import { useBiome } from "./engine/biomes";
-import PersonaPanel from "./components/PersonaPanel";
-import ConstellationRoster from "./components/ConstellationRoster";
 import SignalLine from "./components/SignalLine";
 import Observatory from "./components/Observatory";
-import { PERSONA_ROSTER, usePersona } from "./paradox/council";
-import { useReflectionJournal } from "./hooks/useReflectionJournal";
+import { usePersona } from "./paradox/council";
 import { useCelestialStructures } from "./hooks/useCelestialStructures";
 import { BiomeProvider } from "./engine/biomes";
 
@@ -136,8 +126,7 @@ export default function App() {
 function AppShell() {
   const { show } = useToast();
   const { updateMetrics, intent: biomeIntent, metrics: biomeMetrics } = useBiome();
-  const { tethers, constellations, addTether, setConstellations, renameConstellation } = useCelestialStructures();
-  const { reflections, addReflection } = useReflectionJournal();
+  const { tethers, constellations, addTether, setConstellations } = useCelestialStructures();
   const [tasks, setTasks] = useLocalTasks(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -157,12 +146,8 @@ function AppShell() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
   const { engine: observerEngine, insights: observerInsights } = useObserverEngine({ tasks });
-  const [entropyLookup, setEntropyLookup] = useState<Record<string, number>>({});
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.darkForest), [tasks]);
   const darkForestTasks = useMemo(() => tasks.filter((task) => task.darkForest), [tasks]);
-  const { question: strangeLoopQuestion, refresh: refreshStrangeLoop } = useStrangeLoop({
-    engine: observerEngine,
-  });
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -192,18 +177,7 @@ function AppShell() {
     for (const t of tasks) m[t.id] = t;
     return m;
   }, [tasks]);
-  const darkForestCandidates = useMemo(() => {
-    const now = Date.now();
-    return visibleTasks.filter(
-      (task) =>
-        (entropyLookup[task.id] ?? 0) > 0.8 ||
-        // Orbital decay: long-neglected unfinished work is offered to the
-        // Dark Forest -- suggested, never auto-archived.
-        (task.status !== "DONE" && decayLevel(task.updatedAt, now) >= DARK_FOREST_THRESHOLD)
-    );
-  }, [visibleTasks, entropyLookup]);
 
-  const hasDarkForestSignal = darkForestCandidates.length > 0 || darkForestTasks.length > 0;
 
   const pushToast = useCallback(
     (message: string, variant: ToastVariant = "success") => {
@@ -219,11 +193,7 @@ function AppShell() {
     },
     [addTether, pushToast]
   );
-  const {
-    activeEvent,
-    alertsEnabled: cosmicAlertsEnabled,
-    toggleAlerts,
-  } = useCosmicEvents({
+  const { activeEvent, alertsEnabled: cosmicAlertsEnabled } = useCosmicEvents({
     metrics: {
       avgHeat: biomeMetrics.avgHeat,
       avgEntropy: biomeMetrics.avgEntropy,
@@ -254,13 +224,6 @@ function AppShell() {
       },
       { heat: 0, entropy: 0 }
     );
-    const lookup: Record<string, number> = {};
-    signals.forEach((signal: { taskId?: string; entropy?: number }) => {
-      if (signal.taskId) {
-        lookup[signal.taskId] = signal.entropy ?? 0;
-      }
-    });
-    setEntropyLookup(lookup);
     updateMetrics({
       avgHeat: totals.heat / signals.length,
       avgEntropy: totals.entropy / signals.length,
@@ -299,24 +262,6 @@ function AppShell() {
       pushToast(activeEvent.message, "warn");
     }
   }, [activeEvent, cosmicAlertsEnabled, pushToast]);
-  const handleReflectionSubmit = useCallback(
-    (response: string) => {
-      if (!strangeLoopQuestion) return;
-      const relatedConstellations = constellations
-        .filter((constellation) => strangeLoopQuestion.taskId && constellation.memberIds.includes(strangeLoopQuestion.taskId))
-        .map((constellation) => constellation.id);
-      addReflection({
-        questionId: strangeLoopQuestion.id,
-        question: strangeLoopQuestion.message,
-        response,
-        personaId: persona.id,
-        relatedTaskIds: strangeLoopQuestion.taskId ? [strangeLoopQuestion.taskId] : [],
-        constellationIds: relatedConstellations,
-      });
-      refreshStrangeLoop();
-    },
-    [strangeLoopQuestion, constellations, addReflection, persona.id, refreshStrangeLoop]
-  );
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
@@ -358,17 +303,6 @@ function AppShell() {
       if (nextTask) handleEditTask(nextTask);
     },
     [tasksById, handleEditTask]
-  );
-
-  const handleSendToDarkForest = useCallback(
-    (taskId: string) => {
-      setTasks((prev) =>
-        prev.map((task) => (task.id === taskId ? touchTask({ ...task, darkForest: true }) : task))
-      );
-      appendLogEvent({ t: Date.now(), taskId, kind: "archived", title: tasksById[taskId]?.title });
-      pushToast("Archivist: Let it rest in the Dark Forest.", "success");
-    },
-    [pushToast, setTasks, tasksById]
   );
 
   const handleRestoreFromDarkForest = useCallback(
@@ -609,6 +543,18 @@ function AppShell() {
           setAskOpen(true);
         },
       },
+      ...(darkForestTasks.length
+        ? [
+            {
+              id: "cmd-dark-forest-restore",
+              label: `Restore ${darkForestTasks.length} task${darkForestTasks.length === 1 ? "" : "s"} from the Dark Forest`,
+              run: () => {
+                logEvent({ type: "palette:run" });
+                darkForestTasks.forEach((task) => handleRestoreFromDarkForest(task.id));
+              },
+            },
+          ]
+        : []),
       {
         id: "cmd-export",
         label: "Export tasks as JSON",
@@ -626,7 +572,7 @@ function AppShell() {
         },
       },
     ],
-    [focusedColumn, handleAddTask, handleExportTasks]
+    [focusedColumn, handleAddTask, handleExportTasks, darkForestTasks, handleRestoreFromDarkForest]
   );
 
   const handlePaletteOpen = useCallback(() => {
@@ -639,34 +585,7 @@ function AppShell() {
     });
   }, []);
 
-  const handleGenesisCreate = useCallback(
-    ({ title, description, kind, position }: GenesisPayload) => {
-      const statusMap: Record<GenesisPayload["kind"], Status> = {
-        sun: "IN PROGRESS",
-        moon: "DONE",
-        asteroid: "TO-DO",
-        comet: "TO-DO",
-        "gas-giant": "IN PROGRESS",
-      };
-      const status = statusMap[kind] ?? "TO-DO";
-      const nextTask = {
-        ...createBlankTask(status),
-        title,
-        description,
-        orbitSeed: position,
-      };
-      setTasks((prev) => [...prev, nextTask]);
-      appendLogEvent({ t: Date.now(), taskId: nextTask.id, kind: "created", to: status, title });
-      pushToast(`Condensed a new ${kind.toUpperCase()}`, "success");
-      logEvent({ type: "task:add", source: "click" });
-    },
-    [pushToast, setTasks]
-  );
 
-  // Only counts signals that are genuinely waiting on the user, so the badge
-  // never nags about an empty drawer.
-  const observatorySignals =
-    darkForestCandidates.length + (strangeLoopQuestion ? 1 : 0) + (activeEvent ? 1 : 0);
 
   return (
     <>
@@ -728,13 +647,8 @@ function AppShell() {
               aria-expanded={observatoryOpen}
               className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/90 transition hover:border-white/40 hover:bg-white/10"
             >
-              <span aria-hidden="true">&#9737;</span>
-              Observatory
-              {observatorySignals > 0 ? (
-                <span className="rounded-full bg-white/15 px-1.5 text-[10px] tabular-nums">
-                  {observatorySignals}
-                </span>
-              ) : null}
+              <span aria-hidden="true">&#9881;</span>
+              Settings
             </button>
           </div>
         </header>
@@ -788,6 +702,7 @@ function AppShell() {
             </React.Suspense>
           )}
         </div>
+
       </main>
 
       <input
@@ -800,41 +715,6 @@ function AppShell() {
 
       <Observatory open={observatoryOpen} onClose={() => setObservatoryOpen(false)}>
         <IntentSurface />
-        <div className="mt-4">
-          <GenesisForge onGenesis={handleGenesisCreate} />
-        </div>
-        <CosmicEventBanner
-          event={activeEvent}
-          alertsEnabled={cosmicAlertsEnabled}
-          onToggleAlerts={toggleAlerts}
-        />
-        <StrangeLoopPanel
-          question={strangeLoopQuestion}
-          personaName={persona.name}
-          onRefresh={refreshStrangeLoop}
-          onReflect={handleReflectionSubmit}
-        />
-        <PersonaPanel persona={persona} />
-        <ConstellationRoster constellations={constellations} onRename={renameConstellation} />
-        {hasDarkForestSignal ? (
-          <DarkForestPanel
-            candidates={darkForestCandidates}
-            archived={darkForestTasks}
-            onArchive={handleSendToDarkForest}
-            onRestore={handleRestoreFromDarkForest}
-          />
-        ) : null}
-        {reflections.length ? (
-          <PatternJournal
-            reflections={reflections}
-            personas={Object.values(PERSONA_ROSTER).map((personaMeta) => ({
-              ...personaMeta,
-              rationale: "",
-              questionTemplates: [],
-            }))}
-            constellations={constellations}
-          />
-        ) : null}
       </Observatory>
 
       {isModalOpen ? (

@@ -35,7 +35,7 @@ const Observatory: React.FC<ObservatoryProps> = ({ open, onClose, children }) =>
       {open ? (
         <button
           type="button"
-          aria-label="Close observatory"
+          aria-label="Close settings"
           onClick={onClose}
           className="fixed inset-0 z-40 bg-[#03040c]/60 backdrop-blur-sm"
         />
@@ -45,7 +45,7 @@ const Observatory: React.FC<ObservatoryProps> = ({ open, onClose, children }) =>
         ref={panelRef}
         tabIndex={-1}
         aria-hidden={!open}
-        aria-label="Observatory"
+        aria-label="Settings"
         className={[
           "fixed right-0 top-0 z-50 h-full w-[min(440px,100vw)] overflow-y-auto",
           "border-l border-white/10 bg-[#070a16]/95 backdrop-blur-xl",
@@ -56,8 +56,7 @@ const Observatory: React.FC<ObservatoryProps> = ({ open, onClose, children }) =>
       >
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#070a16]/95 px-5 py-4 backdrop-blur">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.4em] text-white/50">Observatory</p>
-            <p className="text-base font-semibold text-white">Ambient signals</p>
+            <p className="text-base font-semibold text-white">Settings</p>
           </div>
           <button
             type="button"
