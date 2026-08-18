@@ -28,6 +28,7 @@ import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
 import { stampCompletion } from "./lib/earnedStars";
+import { decayLevel, DARK_FOREST_THRESHOLD } from "./lib/orbitalDecay";
 import IntentSurface from "./components/IntentSurface";
 import GenesisForge, { type GenesisPayload } from "./components/GenesisForge";
 import StrangeLoopPanel from "./components/StrangeLoopPanel";
@@ -187,10 +188,16 @@ function AppShell() {
     for (const t of tasks) m[t.id] = t;
     return m;
   }, [tasks]);
-  const darkForestCandidates = useMemo(
-    () => visibleTasks.filter((task) => (entropyLookup[task.id] ?? 0) > 0.8),
-    [visibleTasks, entropyLookup]
-  );
+  const darkForestCandidates = useMemo(() => {
+    const now = Date.now();
+    return visibleTasks.filter(
+      (task) =>
+        (entropyLookup[task.id] ?? 0) > 0.8 ||
+        // Orbital decay: long-neglected unfinished work is offered to the
+        // Dark Forest -- suggested, never auto-archived.
+        (task.status !== "DONE" && decayLevel(task.updatedAt, now) >= DARK_FOREST_THRESHOLD)
+    );
+  }, [visibleTasks, entropyLookup]);
 
   const hasDarkForestSignal = darkForestCandidates.length > 0 || darkForestTasks.length > 0;
 

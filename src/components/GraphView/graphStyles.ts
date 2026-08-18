@@ -57,9 +57,12 @@ export const drawNode = (
   const planetCenterX = node.x ?? 0;
   const planetCenterY = node.y ?? 0;
 
+  const decay = node.decay ?? 0;
+  const vitality = 1 - decay * 0.72; // fully decayed bodies keep a faint ember
+
   ctx.save();
-  // Glow aura
-  ctx.globalAlpha = 0.35;
+  // Glow aura -- neglect dims it first
+  ctx.globalAlpha = 0.35 * Math.max(0.08, 1 - decay * 1.15);
   ctx.fillStyle = palette.glow;
   ctx.filter = "blur(6px)";
   ctx.beginPath();
@@ -85,6 +88,7 @@ export const drawNode = (
     ctx.shadowColor = palette.glow;
     ctx.shadowBlur = opts.hovered ? radius * 3 : radius * 1.5;
   }
+  ctx.globalAlpha = vitality;
   ctx.beginPath();
   ctx.fillStyle = gradient;
   ctx.strokeStyle = opts.hovered ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.12)";
@@ -92,6 +96,7 @@ export const drawNode = (
   ctx.arc(planetCenterX, planetCenterY, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  ctx.globalAlpha = 1;
   ctx.closePath();
   ctx.restore();
 };

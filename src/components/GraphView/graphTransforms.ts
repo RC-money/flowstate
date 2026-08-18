@@ -1,4 +1,5 @@
 import type { Task } from "../../App";
+import { decayLevel } from "../../lib/orbitalDecay";
 
 type ColumnID = Task["status"] extends string ? Task["status"] : string;
 
@@ -8,6 +9,8 @@ export type GraphNode = {
   blocked?: boolean;
   deps: number;
   tags?: string[];
+  /** 0 fresh .. 1 fully neglected. Dims the body and feeds Dark Forest suggestions. */
+  decay?: number;
 };
 
 export type GraphLink = {
@@ -95,11 +98,16 @@ export const tasksToGraph = (
     const tags = normalizeTags((task as TaskLike).tags);
     const dependsOn = normalizeDependsOn((task as TaskLike).dependsOn, id);
 
+    // Completed work does not decay -- the sky already holds it.
+    const decay =
+      status === "DONE" ? 0 : decayLevel(parseTimestamp((task as TaskLike).updatedAt), Date.now());
+
     nodes.push({
       id,
       status,
       blocked,
       deps: dependsOn.length,
+      ...(decay > 0 ? { decay } : {}),
       ...(tags ? { tags } : {}),
     });
     seenNodeIds.add(id);

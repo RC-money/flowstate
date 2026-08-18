@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "../../hooks/useLocalTasks";
 import { getTemporalEngine, TemporalPhysicsEngine } from "./temporalPhysics";
 import type { TemporalBody, TemporalEvent, TemporalHistoryFrame, TemporalHistoryNode } from "./types";
@@ -18,12 +18,15 @@ export interface TemporalPhysicsState {
   rewindTo: (frameIndex: number | null) => void;
 }
 
+const HISTORY_SYNC_MS = 1000;
+
 export const useTemporalPhysics = (options?: TemporalPhysicsOptions): TemporalPhysicsState => {
   const { tasks, enabled = true } = options ?? {};
   const engine = useMemo(() => getTemporalEngine(), []);
   const [bodies, setBodies] = useState<Map<string, TemporalBody>>(engine.getSnapshot().bodies);
   const [history, setHistory] = useState<TemporalHistoryFrame[]>(engine.getHistoryFrames());
   const [rewindFrame, setRewindFrame] = useState<TemporalHistoryFrame | null>(null);
+  const lastHistorySyncRef = useRef(0);
 
   useEffect(() => {
     if (!tasks) return;
@@ -38,7 +41,14 @@ export const useTemporalPhysics = (options?: TemporalPhysicsOptions): TemporalPh
     engine.start();
     const unsubscribe = engine.subscribe((snapshot) => {
       setBodies(snapshot.bodies);
-      setHistory(engine.getHistoryFrames());
+      // The engine ticks every animation frame; copying the 240-frame ring
+      // buffer into React state 60 times a second re-rendered the whole graph
+      // view continuously. The slider does not need more than 1Hz.
+      const now = Date.now();
+      if (now - lastHistorySyncRef.current >= HISTORY_SYNC_MS) {
+        lastHistorySyncRef.current = now;
+        setHistory(engine.getHistoryFrames());
+      }
     });
     return () => {
       unsubscribe();
@@ -52,7 +62,11 @@ export const useTemporalPhysics = (options?: TemporalPhysicsOptions): TemporalPh
   const recordHistoryFrame = useCallback(
     (nodes: TemporalHistoryNode[]) => {
       engine.recordHistoryFrame(nodes);
-      setHistory(engine.getHistoryFrames());
+      const now = Date.now();
+      if (now - lastHistorySyncRef.current >= HISTORY_SYNC_MS) {
+        lastHistorySyncRef.current = now;
+        setHistory(engine.getHistoryFrames());
+      }
     },
     [engine]
   );
