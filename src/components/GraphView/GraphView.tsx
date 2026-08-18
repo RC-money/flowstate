@@ -25,11 +25,12 @@ import {
 import GraphControls from "./GraphControls";
 import Starfield from "./Starfield";
 import { logEvent } from "../../lib/analytics";
-import { useTemporalPhysics } from "../../engine/temporal";
 import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
 import type { Constellation, Tether } from "../../types/celestial";
 import { analyzeConstellations } from "../../engine/constellations/analyzer";
 import { deriveStars } from "../../lib/earnedStars";
+import { replayLog, logTimeRange } from "../../lib/replayLog";
+import { readLog } from "../../lib/taskLog";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
@@ -277,10 +278,33 @@ const GraphView: React.FC<GraphViewProps> = ({
   );
   const isLocked = Boolean(graphPrefs.locked);
 
-  const earnedStars = useMemo(() => deriveStars(tasks), [tasks]);
+  // Rewind replays the persisted task event log -- real board history, not
+  // the old in-memory ghost frames that reset on every reload.
+  const [rewindAt, setRewindAt] = useState<number | null>(null);
+  const isRewinding = rewindAt !== null;
+  const taskLog = useMemo(() => readLog(), []);
+  const rewindRange = useMemo(() => logTimeRange(taskLog), [taskLog]);
+
+  const handleRewindChange = useCallback(
+    (value: number) => {
+      if (!rewindRange) return;
+      // The right edge of the slider is "now".
+      setRewindAt(value >= rewindRange.end ? null : value);
+    },
+    [rewindRange]
+  );
+
+  const exitRewind = useCallback(() => setRewindAt(null), []);
+
+  const displayTasks = useMemo(
+    () => (rewindAt !== null ? replayLog(taskLog, tasks, rewindAt) : tasks),
+    [rewindAt, taskLog, tasks]
+  );
+
+  const earnedStars = useMemo(() => deriveStars(displayTasks), [displayTasks]);
   const graphData: GraphData = useMemo(
-    () => buildGraphData(tasks, graphPrefs),
-    [tasks, graphPrefs]
+    () => buildGraphData(displayTasks, graphPrefs),
+    [displayTasks, graphPrefs]
   );
   const [nodePositions, setNodePositions] = useState<NodePosition[]>([]);
   const [nodeScreenPositions, setNodeScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -541,33 +565,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     locked: isLocked,
     prefersReducedMotion,
   });
-  const {
-    history: temporalHistory,
-    recordHistoryFrame,
-    rewindFrame,
-    rewindTo,
-  } = useTemporalPhysics({ tasks });
-  const [rewindIndex, setRewindIndex] = useState<number | null>(null);
-  const isRewinding = Boolean(rewindFrame);
-
-  const handleRewindChange = useCallback(
-    (value: number) => {
-      if (!temporalHistory.length) return;
-      if (value >= temporalHistory.length - 1) {
-        setRewindIndex(null);
-        rewindTo(null);
-        return;
-      }
-      setRewindIndex(value);
-      rewindTo(temporalHistory[value]?.index ?? null);
-    },
-    [rewindTo, temporalHistory]
-  );
-
-  const exitRewind = useCallback(() => {
-    setRewindIndex(null);
-    rewindTo(null);
-  }, [rewindTo]);
 
   const lastAnalysisRef = useRef<{ at: number; signature: string }>({ at: 0, signature: "" });
   useEffect(() => {
@@ -771,8 +768,6 @@ const GraphView: React.FC<GraphViewProps> = ({
   const handleCanvasMouseLeave = useCallback(() => {
     clearHover();
     setTetherDraft(null);
-    setRewindIndex(null);
-    rewindTo(null);
   }, [clearHover]);
 
   const handleBackgroundClick = useCallback(() => {
@@ -1129,7 +1124,6 @@ const GraphView: React.FC<GraphViewProps> = ({
       if (fg?.graph2ScreenCoords && viewport) {
         const rect = viewport.getBoundingClientRect();
         const next: NodePosition[] = [];
-        const historyNodes: Array<{ id: string; x: number; y: number }> = [];
         const screenMap: Record<string, { x: number; y: number }> = {};
         graphData.nodes.forEach((node) => {
           const typed = node as GraphNode & { x?: number; y?: number };
@@ -1148,17 +1142,9 @@ const GraphView: React.FC<GraphViewProps> = ({
             x: screenX,
             y: screenY,
           });
-          historyNodes.push({
-            id: typed.id,
-            x: screenX,
-            y: screenY,
-          });
           screenMap[typed.id] = { x: screenX, y: screenY };
         });
         updateNodePositions(next);
-        if (historyNodes.length) {
-          recordHistoryFrame(historyNodes);
-        }
         setNodeScreenPositions(screenMap);
       } else {
         updateNodePositions([]);
@@ -1172,7 +1158,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         cancelAnimationFrame(frame);
       }
     };
-  }, [graphData.nodes, isNodeVisible, updateNodePositions, recordHistoryFrame]);
+  }, [graphData.nodes, isNodeVisible, updateNodePositions]);
 
   const handleZoomSliderChange = useCallback((value: number) => {
     const next = Math.min(2.4, Math.max(0.5, value));
@@ -1291,15 +1277,22 @@ const GraphView: React.FC<GraphViewProps> = ({
           </p>
         </div>
       </div>
-      {temporalHistory.length > 1 ? (
+      {rewindRange && rewindRange.end > rewindRange.start ? (
         <div className="mx-auto mt-4 w-full max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/70 px-5 py-4 text-sm text-white shadow-lg shadow-black/30 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-white/60">
-                Rewind Mode
+                Rewind
               </p>
               <p className="text-base font-semibold">
-                {isRewinding ? "Rewind Mode Active" : "Scrub through the galaxy’s memory"}
+                {isRewinding && rewindAt !== null
+                  ? new Date(rewindAt).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })
+                  : "Scrub through the galaxy's memory"}
               </p>
             </div>
             {isRewinding ? (
@@ -1308,18 +1301,24 @@ const GraphView: React.FC<GraphViewProps> = ({
                 onClick={exitRewind}
                 className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60"
               >
-                Exit Rewind
+                Return to now
               </button>
             ) : null}
           </div>
           <input
             type="range"
-            min={0}
-            max={temporalHistory.length - 1}
-            value={rewindIndex ?? temporalHistory.length - 1}
+            min={rewindRange.start}
+            max={rewindRange.end}
+            step={Math.max(1000, Math.floor((rewindRange.end - rewindRange.start) / 200))}
+            value={rewindAt ?? rewindRange.end}
             onChange={(event) => handleRewindChange(Number(event.target.value))}
+            aria-label="Rewind through board history"
             className="mt-4 w-full"
           />
+          <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wide text-white/40">
+            <span>{new Date(rewindRange.start).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+            <span>Now</span>
+          </div>
         </div>
       ) : null}
 
@@ -1373,21 +1372,6 @@ const GraphView: React.FC<GraphViewProps> = ({
                   r={6}
                   fill="rgba(255,255,255,0.3)"
                 />
-              </svg>
-            ) : null}
-            {rewindFrame ? (
-              <svg className="pointer-events-none absolute inset-0 z-20" role="presentation">
-                {rewindFrame.nodes.map((node) => (
-                  <circle
-                    key={`ghost-${node.id}-${rewindFrame.index}`}
-                    cx={node.x}
-                    cy={node.y}
-                    r={10}
-                    fill="rgba(148,163,184,0.2)"
-                    stroke="rgba(59,130,246,0.5)"
-                    strokeWidth={1.5}
-                  />
-                ))}
               </svg>
             ) : null}
             {constellationOverlays.map((overlay) =>
