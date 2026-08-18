@@ -141,7 +141,7 @@ const statusLegendMap: Record<string, LegendKey | undefined> = {
   DONE: "Done",
 };
 
-const linkLegendMap: Record<GraphLink["kind"], LegendKey> = {
+const linkLegendMap: Partial<Record<GraphLink["kind"], LegendKey>> = {
   dependency: "Dependency",
   temporal: "Temporal",
 };
@@ -555,7 +555,18 @@ const GraphView: React.FC<GraphViewProps> = ({
     // re-analyzed and re-persisted constellations 60 times a second.
     const now = Date.now();
     if (now - lastAnalysisRef.current.at < 2000) return;
-    const next = analyzeConstellations(tasks, tethers ?? [], nodeScreenPositions);
+    // Tag links act as soft tethers: clusters emerge from shared labels
+    // without the user ever drawing a line.
+    const tagTethers = graphData.links
+      .filter((link) => link.kind === "tag")
+      .map((link, index) => ({
+        id: `tag-link-${index}`,
+        sourceId: typeof link.source === "string" ? link.source : String(link.source),
+        targetId: typeof link.target === "string" ? link.target : String(link.target),
+        createdAt: 0,
+        strength: 0.5,
+      }));
+    const next = analyzeConstellations(tasks, [...(tethers ?? []), ...tagTethers], nodeScreenPositions);
     const signature = next
       .map((c) => c.memberIds.slice().sort().join("."))
       .sort()
@@ -563,7 +574,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     if (signature === lastAnalysisRef.current.signature) return;
     lastAnalysisRef.current = { at: now, signature };
     onConstellationsChange(next);
-  }, [tasks, tethers, nodeScreenPositions, onConstellationsChange]);
+  }, [tasks, tethers, graphData.links, nodeScreenPositions, onConstellationsChange]);
 
   const tetherLines = useMemo(() => {
     if (!tethers.length) return [];

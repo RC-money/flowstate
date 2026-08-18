@@ -4,6 +4,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "../App";
 import { dueState, formatDueLabel, DUE_TONES } from "../lib/taskDates";
+import { subtaskProgress, type Subtask } from "../lib/subtasks";
 
 export interface TaskCardProps {
   id: string;
@@ -13,6 +14,7 @@ export interface TaskCardProps {
   description?: string;
   tags?: string[];
   depTitles?: string[];
+  subtasks?: Subtask[];
   onClick?: () => void;
 }
 
@@ -24,6 +26,7 @@ export default function TaskCard({
   description,
   tags,
   depTitles,
+  subtasks,
   onClick,
 }: TaskCardProps) {
   // accent based on column
@@ -33,6 +36,7 @@ export default function TaskCard({
 
   // A completed task is never late, so it reads as plain regardless of its date.
   const due = status === "DONE" ? "none" : dueState(dueDate, new Date());
+  const progress = subtaskProgress(subtasks);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
 
@@ -72,7 +76,7 @@ export default function TaskCard({
         {description ? (
           <p className="mt-1.5 line-clamp-2 text-[13.5px] leading-snug text-[#9aa6c4]">{description}</p>
         ) : null}
-        {(tags?.length || depTitles?.length || due !== "none") ? (
+        {(tags?.length || depTitles?.length || subtasks?.length || due !== "none") ? (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {due !== "none" ? (
               <span
@@ -89,6 +93,23 @@ export default function TaskCard({
                 {tag}
               </span>
             ))}
+            {progress.total > 0 ? (
+              <span
+                aria-label={`${progress.done} of ${progress.total} subtasks complete`}
+                className="inline-flex items-center gap-0.5 text-[11px] leading-none"
+              >
+                {Array.from({ length: progress.total }, (_, i) => (
+                  <span
+                    key={i}
+                    aria-hidden="true"
+                    className={i < progress.done ? "text-[#f7e28b]" : "text-[#3d425f]"}
+                    style={i < progress.done ? { textShadow: "0 0 6px rgba(247,226,139,0.8)" } : undefined}
+                  >
+                    &#9733;
+                  </span>
+                ))}
+              </span>
+            ) : null}
             {(depTitles ?? []).map((dep) => (
               <span
                 key={dep}

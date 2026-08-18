@@ -34,3 +34,16 @@ describe("analyzeConstellations", () => {
     expect(analyzeConstellations(tasks, [tether("a", "b"), tether("b", "c")], {})).toHaveLength(0);
   });
 });
+
+describe("tag naming", () => {
+  test("a cluster whose members all share a tag takes the tag as its name", () => {
+    const tagged = [
+      { id: "a", title: "Login flow", status: "TO-DO" as const, createdAt: NOW, updatedAt: NOW, tags: ["auth"] },
+      { id: "b", title: "Token refresh", status: "TO-DO" as const, createdAt: NOW, updatedAt: NOW, tags: ["auth", "api"] },
+      { id: "c", title: "Session store", status: "TO-DO" as const, createdAt: NOW, updatedAt: NOW, tags: ["Auth"] },
+    ];
+    const positions = { a: { x: 0, y: 0 }, b: { x: 40, y: 0 }, c: { x: 0, y: 40 } };
+    const found = analyzeConstellations(tagged, [tether("a", "b"), tether("b", "c")], positions);
+    expect(found[0].suggestedName).toBe("Auth");
+  });
+});

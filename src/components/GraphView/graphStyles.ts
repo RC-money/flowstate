@@ -88,6 +88,28 @@ export const drawNode = (
     ctx.shadowColor = palette.glow;
     ctx.shadowBlur = opts.hovered ? radius * 3 : radius * 1.5;
   }
+  // Subtasks orbit as tiny stars: done ones ignite gold, pending stay embers.
+  if (node.subtaskTotal && node.subtaskTotal > 0) {
+    const orbitR = radius * 1.9;
+    for (let i = 0; i < node.subtaskTotal; i += 1) {
+      const angle = (i / node.subtaskTotal) * Math.PI * 2 - Math.PI / 2;
+      const sx = planetCenterX + Math.cos(angle) * orbitR;
+      const sy = planetCenterY + Math.sin(angle) * orbitR;
+      const lit = i < (node.subtaskDone ?? 0);
+      ctx.save();
+      ctx.globalAlpha = lit ? 0.95 : 0.35;
+      ctx.fillStyle = lit ? "#f7e28b" : "rgba(148,163,184,0.6)";
+      if (lit) {
+        ctx.shadowColor = "rgba(247,226,139,0.9)";
+        ctx.shadowBlur = 6;
+      }
+      ctx.beginPath();
+      ctx.arc(sx, sy, lit ? 1.8 : 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   ctx.globalAlpha = vitality;
   ctx.beginPath();
   ctx.fillStyle = gradient;
@@ -106,6 +128,7 @@ export const getLinkColor = (
   highlighted: boolean
 ): string => {
   if (highlighted) return "hsl(var(--accent-cyan))";
+  if (link.kind === "tag") return "rgba(165, 175, 255, 0.16)";
   return link.kind === "dependency"
     ? "hsl(var(--muted-strong))"
     : "hsl(var(--muted))";
@@ -114,7 +137,10 @@ export const getLinkColor = (
 export const getLinkWidth = (
   link: GraphLink,
   highlighted: boolean
-): number => (highlighted || link.kind === "dependency" ? 2 : 1);
+): number => {
+  if (link.kind === "tag") return highlighted ? 1.2 : 0.8;
+  return highlighted || link.kind === "dependency" ? 2 : 1;
+};
 
 export const getParticleColor = (
   link: GraphLink,

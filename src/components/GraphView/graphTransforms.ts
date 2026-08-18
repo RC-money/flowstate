@@ -11,12 +11,14 @@ export type GraphNode = {
   tags?: string[];
   /** 0 fresh .. 1 fully neglected. Dims the body and feeds Dark Forest suggestions. */
   decay?: number;
+  subtaskTotal?: number;
+  subtaskDone?: number;
 };
 
 export type GraphLink = {
   source: string;
   target: string;
-  kind: "dependency" | "temporal";
+  kind: "dependency" | "temporal" | "tag";
 };
 
 export type GraphData = {
@@ -102,6 +104,7 @@ export const tasksToGraph = (
     const decay =
       status === "DONE" ? 0 : decayLevel(parseTimestamp((task as TaskLike).updatedAt), Date.now());
 
+    const subtasks = Array.isArray((task as Task).subtasks) ? (task as Task).subtasks! : [];
     nodes.push({
       id,
       status,
@@ -109,6 +112,9 @@ export const tasksToGraph = (
       deps: dependsOn.length,
       ...(decay > 0 ? { decay } : {}),
       ...(tags ? { tags } : {}),
+      ...(subtasks.length
+        ? { subtaskTotal: subtasks.length, subtaskDone: subtasks.filter((s) => s.done).length }
+        : {}),
     });
     seenNodeIds.add(id);
 
@@ -131,6 +137,42 @@ export const tasksToGraph = (
         links.push(link);
       }
     });
+  });
+
+  // Tag gravity: tasks sharing a tag are chained oldest-to-newest. A chain
+  // keeps the cluster connected for the constellation analyzer without the
+  // n-squared clique a full mesh would draw. Dependencies between the same
+  // pair win -- the tag link would only duplicate the line.
+  const tagBuckets = new Map<string, Array<{ id: string; createdAt: number }>>();
+  safeTasks.forEach((task) => {
+    const id = parseId(task.id);
+    if (!id) return;
+    const tags = normalizeTags((task as TaskLike).tags) ?? [];
+    tags.forEach((tag) => {
+      const key = tag.toLowerCase();
+      if (!tagBuckets.has(key)) tagBuckets.set(key, []);
+      tagBuckets.get(key)?.push({ id, createdAt: parseTimestamp((task as TaskLike).createdAt) });
+    });
+  });
+  const pairAlreadyLinked = (a: string, b: string) =>
+    links.some(
+      (link) =>
+        (link.source === a && link.target === b) || (link.source === b && link.target === a)
+    );
+  tagBuckets.forEach((bucket) => {
+    if (bucket.length < 2) return;
+    const sorted = bucket.slice().sort((x, y) => x.createdAt - y.createdAt);
+    for (let i = 0; i < sorted.length - 1; i += 1) {
+      const source = sorted[i].id;
+      const target = sorted[i + 1].id;
+      if (source === target || pairAlreadyLinked(source, target)) continue;
+      const link: GraphLink = { source, target, kind: "tag" };
+      const sig = linkSignature(link);
+      if (!seenLinks.has(sig)) {
+        seenLinks.add(sig);
+        links.push(link);
+      }
+    }
   });
 
   if (showTemporal) {

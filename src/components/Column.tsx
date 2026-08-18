@@ -94,6 +94,7 @@ export default function Column({
             dueDate={t.dueDate}
             description={t.description}
             tags={t.tags}
+            subtasks={t.subtasks}
             depTitles={(t.dependsOn ?? [])
               .map((depId) => titleById?.[depId])
               .filter((x): x is string => Boolean(x))}

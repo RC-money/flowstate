@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "../App";
+import { addSubtask, removeSubtask, toggleSubtask, type Subtask } from "../lib/subtasks";
 
 type RichTask = Task & { description?: string };
 
@@ -31,6 +32,8 @@ export default function TaskModal({
     initialTask?.status ?? defaultStatus
   );
   const [dueDate, setDueDate] = useState(initialTask?.dueDate ?? "");
+  const [subtasks, setSubtasks] = useState<Subtask[]>(initialTask?.subtasks ?? []);
+  const [subtaskDraft, setSubtaskDraft] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,6 +41,8 @@ export default function TaskModal({
     setDescription(initialTask?.description ?? "");
     setStatus(initialTask?.status ?? defaultStatus);
     setDueDate(initialTask?.dueDate ?? "");
+    setSubtasks(initialTask?.subtasks ?? []);
+    setSubtaskDraft("");
   }, [initialTask, mode]);
 
   useEffect(() => {
@@ -72,6 +77,7 @@ export default function TaskModal({
       // edits with {...existing, ...payload}, and an omitted key would preserve
       // the old date instead of removing it.
       dueDate: dueDate || undefined,
+      subtasks: subtasks.length ? subtasks : undefined,
     };
 
     onSave(payload);
@@ -179,6 +185,80 @@ export default function TaskModal({
               ) : null}
             </div>
           </label>
+
+          <div className="block text-sm font-medium text-slate-200">
+            Subtasks
+            <span className="ml-2 text-xs font-normal text-slate-500">
+              {subtasks.length
+                ? `${subtasks.filter((s) => s.done).length} of ${subtasks.length} lit`
+                : "each one becomes a star"}
+            </span>
+            {subtasks.length ? (
+              <ul className="mt-2 space-y-1.5">
+                {subtasks.map((subtask) => (
+                  <li key={subtask.id} className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={subtask.done}
+                      aria-label={`${subtask.done ? "Reopen" : "Complete"} ${subtask.title}`}
+                      onClick={() => setSubtasks((prev) => toggleSubtask(prev, subtask.id, Date.now()))}
+                      className={[
+                        "text-base leading-none transition",
+                        subtask.done
+                          ? "text-[#f7e28b] [text-shadow:0_0_8px_rgba(247,226,139,0.8)]"
+                          : "text-[#3d425f] hover:text-[#6b7799]",
+                      ].join(" ")}
+                    >
+                      &#9733;
+                    </button>
+                    <span
+                      className={[
+                        "flex-1 text-sm",
+                        subtask.done ? "text-slate-500 line-through" : "text-slate-200",
+                      ].join(" ")}
+                    >
+                      {subtask.title}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${subtask.title}`}
+                      onClick={() => setSubtasks((prev) => removeSubtask(prev, subtask.id))}
+                      className="text-xs text-slate-600 transition hover:text-rose-300"
+                    >
+                      &#10005;
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-2 flex gap-2">
+              <input
+                type="text"
+                value={subtaskDraft}
+                onChange={(event) => setSubtaskDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    setSubtasks((prev) => addSubtask(prev, subtaskDraft));
+                    setSubtaskDraft("");
+                  }
+                }}
+                placeholder="Add a subtask"
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setSubtasks((prev) => addSubtask(prev, subtaskDraft));
+                  setSubtaskDraft("");
+                }}
+                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:text-white"
+              >
+                Add
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-4">

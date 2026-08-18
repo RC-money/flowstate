@@ -9,10 +9,20 @@ const MIN_SIZE = 3;
 const MAX_DISTANCE = 220;
 
 const suggestName = (tasks: Task[], members: string[]): string => {
-  const keywords = members
-    .map((id) => tasks.find((task) => task.id === id)?.title ?? "")
-    .map((title) => title.split(/\s+/)[0])
-    .filter(Boolean);
+  // A tag every member carries is the cluster's real name -- the user already
+  // named this work, one label at a time.
+  const memberTasks = members
+    .map((id) => tasks.find((task) => task.id === id))
+    .filter((task): task is Task => Boolean(task));
+  if (memberTasks.length === members.length && memberTasks.length > 0) {
+    const first = (memberTasks[0].tags ?? []).map((tag) => tag.toLowerCase());
+    const shared = first.find((tag) =>
+      memberTasks.every((task) => (task.tags ?? []).some((t) => t.toLowerCase() === tag))
+    );
+    if (shared) return shared.charAt(0).toUpperCase() + shared.slice(1);
+  }
+
+  const keywords = memberTasks.map((task) => task.title.split(/\s+/)[0]).filter(Boolean);
   if (!keywords.length) {
     return `Constellation-${Math.random().toString(36).slice(2, 5)}`;
   }

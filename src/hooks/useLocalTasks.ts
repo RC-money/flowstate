@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { normalizeDates } from "../lib/taskDates";
+import { normalizeSubtasks, type Subtask } from "../lib/subtasks";
 
 export type TaskStatus = "TO-DO" | "IN PROGRESS" | "DONE";
 export interface Task {
@@ -20,6 +21,8 @@ export interface Task {
   dueDate?: string;
   /** Epoch ms, stamped on entering DONE. Earns the task's star in the sky. */
   completedAt?: number;
+  /** Checklist inside the parent -- never board cards. Stars on the card. */
+  subtasks?: Subtask[];
 }
 
 /** Stamps a task as changed now. Use at every mutation site. */
@@ -55,7 +58,12 @@ const coerceTasks = (payload: unknown): Tasks | null => {
     }
     // Repairs rather than rejects: every board saved before dates existed is
     // missing these fields, and rejecting would silently reset the user's data.
-    next.push({ ...item, ...normalizeDates(item, now) });
+    const subtasks = normalizeSubtasks((item as Task).subtasks);
+    next.push({
+      ...item,
+      ...normalizeDates(item, now),
+      ...(subtasks?.length ? { subtasks } : {}),
+    });
   }
   return next;
 };
