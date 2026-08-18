@@ -28,8 +28,6 @@ import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
 import type { Constellation, Tether } from "../../types/celestial";
 import { analyzeConstellations } from "../../engine/constellations/analyzer";
 import { deriveStars } from "../../lib/earnedStars";
-import { replayLog, logTimeRange } from "../../lib/replayLog";
-import { readLog } from "../../lib/taskLog";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
@@ -267,36 +265,14 @@ const GraphView: React.FC<GraphViewProps> = ({
   );
   const isLocked = Boolean(graphPrefs.locked);
 
-  // Rewind replays the persisted task event log -- real board history, not
-  // the old in-memory ghost frames that reset on every reload.
-  const [rewindAt, setRewindAt] = useState<number | null>(null);
-  const isRewinding = rewindAt !== null;
-  const taskLog = useMemo(() => readLog(), []);
-  const rewindRange = useMemo(() => logTimeRange(taskLog), [taskLog]);
-
-  const handleRewindChange = useCallback(
-    (value: number) => {
-      if (!rewindRange) return;
-      // The right edge of the slider is "now".
-      setRewindAt(value >= rewindRange.end ? null : value);
-    },
-    [rewindRange]
-  );
-
-  const exitRewind = useCallback(() => setRewindAt(null), []);
-
-  const displayTasks = useMemo(
-    () => (rewindAt !== null ? replayLog(taskLog, tasks, rewindAt) : tasks),
-    [rewindAt, taskLog, tasks]
-  );
 
   const earnedStars = useMemo(
-    () => deriveStars([...displayTasks, ...etherealTasks]),
-    [displayTasks, etherealTasks]
+    () => deriveStars([...tasks, ...etherealTasks]),
+    [tasks, etherealTasks]
   );
   const graphData: GraphData = useMemo(
-    () => buildGraphData(displayTasks, graphPrefs),
-    [displayTasks, graphPrefs]
+    () => buildGraphData(tasks, graphPrefs),
+    [tasks, graphPrefs]
   );
   const [nodePositions, setNodePositions] = useState<NodePosition[]>([]);
   const [nodeScreenPositions, setNodeScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -513,6 +489,16 @@ const GraphView: React.FC<GraphViewProps> = ({
     [graphData.nodes.length]
   );
 
+  // Fires when the d3 simulation cools. The mount-time zoomToFit used a
+  // 200ms timer and framed mid-explosion -- nodes kept drifting out of view.
+  // Framing on settle scales the camera to the layout that will actually hold.
+  const didAutoFrameRef = useRef(false);
+  const handleEngineSettled = useCallback(() => {
+    if (didAutoFrameRef.current) return;
+    didAutoFrameRef.current = true;
+    frameGraphToNodes(600);
+  }, [frameGraphToNodes]);
+
   const resetLayout = useCallback(() => {
     clearHover();
     frameGraphToNodes(400);
@@ -688,7 +674,6 @@ const GraphView: React.FC<GraphViewProps> = ({
 
   const handleNodeClick = useCallback(
     (node: GraphNode, event?: MouseEvent) => {
-      if (isRewinding) return;
       if (!node || typeof node.id !== "string") return;
       if (event?.shiftKey) {
         event.preventDefault();
@@ -1148,50 +1133,6 @@ const GraphView: React.FC<GraphViewProps> = ({
 
   return (
     <section className="min-h-screen space-y-8 px-4 py-8">
-      {rewindRange && rewindRange.end > rewindRange.start ? (
-        <div className="mx-auto mt-4 w-full max-w-5xl rounded-2xl border border-white/10 bg-[#0B1220]/70 px-5 py-4 text-sm text-white shadow-lg shadow-black/30 backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-white/60">
-                Rewind
-              </p>
-              <p className="text-base font-semibold">
-                {isRewinding && rewindAt !== null
-                  ? new Date(rewindAt).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })
-                  : "Scrub through the galaxy's memory"}
-              </p>
-            </div>
-            {isRewinding ? (
-              <button
-                type="button"
-                onClick={exitRewind}
-                className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-white/60"
-              >
-                Return to now
-              </button>
-            ) : null}
-          </div>
-          <input
-            type="range"
-            min={rewindRange.start}
-            max={rewindRange.end}
-            step={Math.max(1000, Math.floor((rewindRange.end - rewindRange.start) / 200))}
-            value={rewindAt ?? rewindRange.end}
-            onChange={(event) => handleRewindChange(Number(event.target.value))}
-            aria-label="Rewind through board history"
-            className="mt-4 w-full"
-          />
-          <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wide text-white/40">
-            <span>{new Date(rewindRange.start).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-            <span>Now</span>
-          </div>
-        </div>
-      ) : null}
 
       <div className="mx-auto w-full max-w-5xl">
         <div
@@ -1289,6 +1230,7 @@ const GraphView: React.FC<GraphViewProps> = ({
             <ForceGraph2D<GraphNode, GraphLink>
               ref={fgRef}
               graphData={graphData}
+              onEngineStop={handleEngineSettled}
               nodeRelSize={6}
               warmupTicks={60}
               backgroundColor="rgba(0,0,0,0)"
