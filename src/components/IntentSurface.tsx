@@ -1,77 +1,65 @@
 import React from "react";
 import { BIOME_REGISTRY, useBiome } from "../engine/biomes";
 
-type IntentOption = {
+type ColorOption = {
   intent: "progress" | "clarity" | "lost" | "overwhelm";
   biomeId: keyof typeof BIOME_REGISTRY;
-  title: string;
-  description: string;
+  name: string;
+  swatches: [string, string, string];
 };
 
-const OPTIONS: IntentOption[] = [
-  { intent: "progress", biomeId: "hunter", title: "I want to make progress", description: "High heat, decisive strikes, visible trails." },
-  { intent: "clarity", biomeId: "mentor", title: "I need clarity", description: "Calm blue hues, slower motion, focus on order." },
-  { intent: "overwhelm", biomeId: "archivist", title: "I’m overwhelmed", description: "Soft indigo glow, gentle drift, Dark Forest comfort." },
+// A color picker shows colors. The old intent framing ("I'm overwhelmed",
+// heat-sensitivity percentages) was the last remnant of the retired
+// confessional system -- the biome ids underneath are unchanged.
+const OPTIONS: ColorOption[] = [
+  { intent: "progress", biomeId: "hunter", name: "Ember", swatches: ["#fb923c", "#7c2d12", "#05070f"] },
+  { intent: "clarity", biomeId: "mentor", name: "Ocean", swatches: ["#60a5fa", "#5b5cf0", "#090a19"] },
+  { intent: "overwhelm", biomeId: "archivist", name: "Violet", swatches: ["#a5afff", "#6366f1", "#08091a"] },
 ];
 
 const IntentSurface: React.FC = () => {
-  const { intent, setIntent, tokens } = useBiome();
+  const { intent, setIntent } = useBiome();
 
   return (
-    <section
-      className="relative mb-8 rounded-3xl border border-white/10 p-6 shadow-[0_25px_80px_rgba(0,0,0,0.45)] transition-all"
-      style={{
-        backgroundImage: tokens.background,
-      }}
-    >
-      <div className="absolute inset-0 overflow-hidden rounded-3xl">
-        <div
-          className="absolute inset-0 opacity-40 blur-3xl transition-transform"
-          style={{
-            background: `radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 60%)`,
-            transform: `scale(${0.95 + tokens.particleSpeed * 0.03})`,
-          }}
-          aria-hidden="true"
-        />
-      </div>
-      <div className="relative z-10 text-center text-slate-100">
-        <p className="text-sm uppercase tracking-[0.3em] text-white/70">Colors</p>
-        <p className="mt-1 text-sm text-white/70">
-          Pick the palette the galaxy wears.
-        </p>
-      </div>
-      <div className="relative z-10 mt-6 grid gap-4 text-left">
+    <section className="mt-2">
+      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-white/50">Colors</p>
+      <div className="mt-3 grid gap-2.5">
         {OPTIONS.map((option) => {
           const isActive = option.intent === intent;
-          const registry = BIOME_REGISTRY[option.biomeId];
+          const accent = BIOME_REGISTRY[option.biomeId].accent;
           return (
             <button
               key={option.intent}
               type="button"
               onClick={() => setIntent(option.intent)}
+              aria-pressed={isActive}
               className={[
-                "group flex h-full flex-col justify-between rounded-2xl border px-5 py-6 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/80",
+                "flex items-center justify-between gap-4 rounded-2xl border px-4 py-3.5 text-left transition",
                 isActive
-                  ? "border-white/70 bg-white/15 text-white shadow-inner shadow-white/15"
-                  : "border-white/20 bg-black/20 text-slate-200 hover:border-white/50 hover:bg-black/30",
+                  ? "border-white/50 bg-white/10"
+                  : "border-white/10 bg-black/20 hover:border-white/30",
               ].join(" ")}
             >
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-white/60">{option.biomeId}</p>
-                <h3 className="mt-3 text-xl font-semibold">{option.title}</h3>
-                <p className="mt-2 text-sm text-white/80">{option.description}</p>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3 text-xs text-white/70">
-                <span className="rounded-full border border-white/30 px-3 py-1">
-                  Heat sensitivity: {(registry.heatSensitivity * 100).toFixed(0)}%
+              <span className="flex items-center gap-3">
+                <span className="flex" aria-hidden="true">
+                  {option.swatches.map((color, i) => (
+                    <span
+                      key={color}
+                      className="h-6 w-6 rounded-full border border-white/20"
+                      style={{ background: color, marginLeft: i === 0 ? 0 : -8 }}
+                    />
+                  ))}
                 </span>
-                <span className="rounded-full border border-white/30 px-3 py-1">
-                  Cluster threshold: {(registry.clusterThreshold * 100).toFixed(0)}%
+                <span className="text-sm font-semibold text-white">{option.name}</span>
+              </span>
+              {isActive ? (
+                <span
+                  className="font-mono text-[10px] uppercase tracking-wide"
+                  style={{ color: accent }}
+                >
+                  Active
                 </span>
-                <span className="rounded-full border border-white/30 px-3 py-1">
-                  Particles: {(registry.ambientParticles.speed * 100).toFixed(0)}%
-                </span>
-              </div>
+              ) : null}
             </button>
           );
         })}
