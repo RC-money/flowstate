@@ -713,6 +713,18 @@ const GraphView: React.FC<GraphViewProps> = ({
     []
   );
 
+  const lastOpenRef = useRef<{ id: string; at: number }>({ id: "", at: 0 });
+  const openTaskOnce = useCallback(
+    (taskId: string) => {
+      // Click and micro-drag can both resolve to an open; fire it once.
+      const now = Date.now();
+      if (lastOpenRef.current.id === taskId && now - lastOpenRef.current.at < 400) return;
+      lastOpenRef.current = { id: taskId, at: now };
+      onOpenTask(taskId);
+    },
+    [onOpenTask]
+  );
+
   const handleNodeClick = useCallback(
     (node: GraphNode, event?: MouseEvent) => {
       if (!node || typeof node.id !== "string") return;
@@ -731,9 +743,9 @@ const GraphView: React.FC<GraphViewProps> = ({
         return;
       }
       if (!isNodeVisible(node)) return;
-      onOpenTask(node.id);
+      openTaskOnce(node.id);
     },
-    [isNodeVisible, onOpenTask, onCreateTether, projectToViewport, tetherDraft]
+    [isNodeVisible, openTaskOnce, onCreateTether, projectToViewport, tetherDraft]
   );
 
   const handleNodeHover = useCallback(
@@ -798,8 +810,18 @@ const GraphView: React.FC<GraphViewProps> = ({
   }, [handleInteractionStart]);
 
   const handleNodeDragEnd = useCallback(
-    (node: GraphNode) => {
+    (node: GraphNode, translate?: { x: number; y: number }) => {
       const positioned = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+      const moved = translate ? Math.hypot(translate.x, translate.y) : Number.POSITIVE_INFINITY;
+
+      if (moved < 4) {
+        // A click with hand wobble, not an arrangement. Don't pin here; if a
+        // pin already existed the drag machinery kept fx/fy, so just open.
+        if (isNodeVisible(node)) openTaskOnce(node.id);
+        handleInteractionEnd();
+        return;
+      }
+
       if (typeof positioned.x === "number" && typeof positioned.y === "number") {
         // Where you drop it is where it stays -- across views and reloads.
         positioned.fx = positioned.x;
@@ -808,7 +830,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       }
       handleInteractionEnd();
     },
-    [handleInteractionEnd]
+    [handleInteractionEnd, isNodeVisible, openTaskOnce]
   );
 
   // react-force-graph-2d emits pan events through onZoom callbacks; reuse them for hover clearing.
@@ -1361,14 +1383,6 @@ const GraphView: React.FC<GraphViewProps> = ({
                 <p className="mt-1 text-base font-semibold text-white">
                   {hoveredTask?.title ?? hoveredGraphNode.id}
                 </p>
-                <div className="mt-3 flex items-center gap-3 text-xs text-slate-300">
-                  <span className="rounded-lg border border-white/10 px-2 py-1">
-                    {hoveredGraphNode.deps} deps
-                  </span>
-                  <span className="rounded-lg border border-white/10 px-2 py-1">
-                    {hoveredGraphNode.blocked ? "Blocked" : "Flowing"}
-                  </span>
-                </div>
                 {hoveredGraphNode.tags && hoveredGraphNode.tags.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-1">
                     {hoveredGraphNode.tags.map((tag) => (
