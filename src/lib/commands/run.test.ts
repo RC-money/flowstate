@@ -97,6 +97,12 @@ describe("run: list", () => {
     expect(result.listed?.map((t) => t.id)).toEqual(["t1", "t3"]);
   });
 
+  test("open excludes ethered tasks, matching the board's own filter", () => {
+    const withEthered = [...board, task("t5", "Let go of this", { etheredAt: NOW - DAY })];
+    const result = run({ kind: "list", filter: "open" }, withEthered, NOW);
+    expect(result.listed?.map((t) => t.id)).toEqual(["t1", "t3"]);
+  });
+
   test("decaying returns only neglected tasks, worst first", () => {
     const result = run({ kind: "list", filter: "decaying" }, board, NOW);
     expect(result.listed?.map((t) => t.id)).toEqual(["t3"]);

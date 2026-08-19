@@ -21,7 +21,9 @@ export interface CommandResult {
 const defaultId = (now: number): string =>
   `t_${now}_${Math.random().toString(36).slice(2, 8)}`;
 
-const isOpen = (task: Task): boolean => task.status !== "DONE" && !task.darkForest;
+/** Matches the board's own notion of a live task (see App.tsx visibleTasks). */
+const isOpen = (task: Task): boolean =>
+  task.status !== "DONE" && !task.darkForest && task.etheredAt === undefined;
 
 const quote = (tasks: Task[]): string => tasks.map((task) => `"${task.title}"`).join(", ");
 
