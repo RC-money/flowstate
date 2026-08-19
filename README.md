@@ -18,8 +18,9 @@ npm run lint
 npm run build
 ```
 
-**Flowstate is a desktop app.** The galaxy needs a big screen; there is no
-mobile version, on purpose. Ships as a Tauri app (`npx tauri dev` /
+**Flowstate ships on the desktop first.** iPhone and iPad are planned at full
+parity, syncing through the user's own iCloud Drive rather than a server.
+Ships as a Tauri app (`npx tauri dev` /
 `npx tauri build`), where the board lives in a JSON file the MCP server
 (`mcp/server.ts`) can also reach. In a plain browser, state lives in
 `localStorage` instead.

@@ -49,6 +49,14 @@ file on disk so an MCP server can expose the board to the user's own AI. The
 command layer (`src/lib/commands/`) is the shared substrate — the ⌘K palette,
 and later MCP tools, both call the same `parse` → `resolve` → `run` path.
 
+iPhone and iPad are planned at **full parity, galaxy included**. The board
+syncs through the user's own iCloud Drive -- Apple moves the file, we run no
+server and hold no accounts, so "your data never leaves your machine" survives
+becoming "your data never leaves your devices". MCP stays desktop-anchored:
+iOS cannot host a second process, but an assistant editing the file on the Mac
+shows up on the phone. Mobile is a planned direction, not a bone to protect --
+do not "correct" mobile work back to desktop-only.
+
 **The gate is the exposed function surface, not a prompt or an instruction
 file.** Any assistant reaching the board can only do what `run()` implements:
 board operations only, never styling, layout, biomes, or the graph. Keep it

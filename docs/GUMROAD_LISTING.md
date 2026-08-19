@@ -19,7 +19,7 @@ Alternates, if you want a different angle:
 
 ## Price
 
-**$9** — one time. No subscription, no account, no sync.
+**$9** — one time. No subscription, no account, no server.
 
 ---
 
@@ -71,12 +71,15 @@ Every change it makes is undoable in one call.
 ### What it isn't
 
 - Not for teams. Ever.
-- Not on iPhone or iPad — the galaxy needs a real screen.
+- macOS only today. iPhone and iPad are in progress.
 - Not subscription software. You buy it once.
 
 ### Requirements
 
 macOS on Apple Silicon. Roughly 11 MB installed.
+
+iPhone and iPad versions are being built, with the board syncing through your
+own iCloud — no account with me, no server in the middle.
 
 ---
 
@@ -115,7 +118,7 @@ Different from the listing — this is a person talking, not a product page.
 > enforced by which functions exist, not by a prompt telling the model to
 > behave.
 >
-> No accounts, no sync, no server. Your board is a JSON file on your machine.
+> No accounts, no server. Your board is a JSON file on your machine.
 > macOS, $9 once.
 
 Post to: Hacker News (Show HN), r/macapps, r/SideProject. Lead with the galaxy
