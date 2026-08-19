@@ -28,6 +28,8 @@ import StatusBar from "./components/StatusBar";
 import { useHotkeys } from "./hooks/useHotkeys";
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
+import Welcome from "./components/Welcome";
+import { shouldShowWelcome } from "./lib/storage/firstRun";
 import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
@@ -72,6 +74,8 @@ const seedTask = (
 
 // Staggered ages so the graph's temporal links and the decay curve have
 // something real to read on a first run.
+const WELCOME_KEY = "flowstate:v1:welcomed";
+
 const initialTasks: Task[] = [
   seedTask("t1", "Create dashboard components", "TO-DO", 6),
   seedTask("t2", "Write API documentation", "TO-DO", 5),
@@ -120,7 +124,7 @@ function AppShell() {
   const { show } = useToast();
   const { updateMetrics, metrics: biomeMetrics } = useBiome();
   const { tethers, constellations, addTether, setConstellations } = useCelestialStructures();
-  const [tasks, setTasks] = useLocalTasks(initialTasks);
+  const [tasks, setTasks, hydration] = useLocalTasks(initialTasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -136,6 +140,23 @@ function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const [observatoryOpen, setObservatoryOpen] = useState(false);
+  const [dismissedWelcome, setDismissedWelcome] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem(WELCOME_KEY) !== null;
+  });
+  // Waits for hydration: deciding before the stored board loads would show
+  // "start with empty space" over real work.
+  const showWelcome =
+    hydration.ready &&
+    shouldShowWelcome({ welcomed: dismissedWelcome, storedBoard: hydration.storedBoard });
+  const handleWelcomeChoice = useCallback(
+    (startEmpty: boolean) => {
+      window.localStorage.setItem(WELCOME_KEY, "1");
+      setDismissedWelcome(true);
+      if (startEmpty) setTasks([]);
+    },
+    [setTasks]
+  );
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
   const { engine: observerEngine } = useObserverEngine({ tasks });
@@ -516,7 +537,7 @@ function AppShell() {
       },
       {
         id: "cmd-ask-flow",
-        label: "Ask Flow (AI panel)",
+        label: "Ask Flow (board commands)",
         run: () => {
           logEvent({ type: "palette:run" });
           setAskOpen(true);
@@ -691,6 +712,31 @@ function AppShell() {
 
       <Observatory open={observatoryOpen} onClose={() => setObservatoryOpen(false)}>
         <IntentSurface />
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Your data
+          </p>
+          <p className="mt-1.5 text-xs text-slate-500">
+            Everything lives on this machine. Export is a plain JSON file — it is
+            the whole board.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={handleExportTasks}
+              className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-white/40 hover:bg-white/10"
+            >
+              Export JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:bg-white/5"
+            >
+              Import
+            </button>
+          </div>
+        </section>
       </Observatory>
 
       {isModalOpen ? (
@@ -713,7 +759,8 @@ function AppShell() {
         onGlobalOpen={handlePaletteOpen}
       />
 
-      <AskFlowPanel open={askOpen} onClose={() => setAskOpen(false)} />
+      <AskFlowPanel open={askOpen} onClose={() => setAskOpen(false)} tasks={tasks} onApply={setTasks} />
+      {showWelcome ? <Welcome onChoose={handleWelcomeChoice} /> : null}
     </>
   );
 }

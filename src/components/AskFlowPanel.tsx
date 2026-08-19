@@ -1,63 +1,38 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { askFlow as askFlowStub, rag } from "../lib/ai";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { execute, type CommandResult } from "../lib/commands";
+import type { Task } from "../hooks/useLocalTasks";
 import { useToast } from "./Toast";
 
-type AskFlowPanelProps = {
+interface AskFlowPanelProps {
   open: boolean;
   onClose: () => void;
-};
+  tasks: Task[];
+  onApply: (next: Task[]) => void;
+}
 
-const isAIEnabled = () =>
-  typeof window !== "undefined" && (window as typeof window & {
-    __FLOWSTATE_ENABLE_AI?: boolean;
-  }).__FLOWSTATE_ENABLE_AI === true;
-
-export default function AskFlowPanel({ open, onClose }: AskFlowPanelProps) {
+/**
+ * Plain-English commands over the board: "move the auth thing to done",
+ * "what's rotting". Same parse -> resolve -> run path the MCP server uses,
+ * so anything it can do is board-only and always refusable/undoable.
+ */
+export default function AskFlowPanel({ open, onClose, tasks, onApply }: AskFlowPanelProps) {
   const { show } = useToast();
   const [prompt, setPrompt] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [context, setContext] = useState<string[]>([]);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const lastFocusedRef = useRef<HTMLElement | null>(null);
-
-  const aiEnabled = useMemo(isAIEnabled, [open]);
-
-  const closePanel = useCallback(() => {
-    setLoading(false);
-    setError(null);
-    setContext([]);
-    onClose();
-  }, [onClose]);
+  const [result, setResult] = useState<CommandResult | null>(null);
+  const [undoBoard, setUndoBoard] = useState<Task[] | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    lastFocusedRef.current = document.activeElement as HTMLElement | null;
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 0);
-    setPrompt("");
-    setAnswer(null);
-    setError(null);
-    setContext([]);
-  }, [open]);
-
-  useEffect(() => {
-    if (open) return;
-    const last = lastFocusedRef.current;
-    if (last) {
-      last.focus();
-      lastFocusedRef.current = null;
+    if (open) {
+      setPrompt("");
+      setResult(null);
+      inputRef.current?.focus();
     }
   }, [open]);
+
+  const closePanel = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -71,63 +46,51 @@ export default function AskFlowPanel({ open, onClose }: AskFlowPanelProps) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [open, closePanel]);
 
-  const handleSubmit = async () => {
-    if (!prompt.trim() || !aiEnabled) return;
-    setLoading(true);
-    setError(null);
-    setAnswer(null);
-    try {
-      const normalized = prompt.trim();
-      const [flowAnswer, references] = await Promise.all([
-        askFlowStub(normalized),
-        rag.search(normalized),
-      ]);
-      setAnswer(flowAnswer);
-      setContext(references);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Something went sideways—try again."
-      );
-      console.error("Flowstate AskFlowPanel error", err);
-      show("Flow assist hit turbulence. Try again.", { variant: "warn" });
-    } finally {
-      setLoading(false);
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const text = prompt.trim();
+    if (!text) return;
+    const outcome = execute(text, tasks, Date.now());
+    setResult(outcome);
+    if (outcome.undo) {
+      onApply(outcome.tasks);
+      setUndoBoard(outcome.undo);
+      show(outcome.message, { variant: "success" });
     }
+    setPrompt("");
   };
 
-  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      closePanel();
-    }
+  const handleUndo = () => {
+    if (!undoBoard) return;
+    onApply(undoBoard);
+    setUndoBoard(null);
+    setResult(null);
+    show("Reverted.", { variant: "success" });
   };
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={handleBackdropClick}
+      className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 pt-[18vh] backdrop-blur-sm p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) closePanel();
+      }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="askflow-title"
-        ref={dialogRef}
-        className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B1220]/95 p-5 shadow-2xl shadow-black/60 focus:outline-none"
+        className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B1220]/95 p-5 shadow-2xl shadow-black/60"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <div>
-            <p
-              id="askflow-title"
-              className="text-sm font-semibold uppercase tracking-wide text-slate-300"
-            >
-              Ask Flow
-            </p>
-            <p className="text-xs text-slate-500">
-              Draft summaries, surface blockers, simulate strategy.
-            </p>
-          </div>
+          <p
+            id="askflow-title"
+            className="text-sm font-semibold uppercase tracking-wide text-slate-300"
+          >
+            Ask Flow
+          </p>
           <button
             type="button"
             onClick={closePanel}
@@ -136,104 +99,54 @@ export default function AskFlowPanel({ open, onClose }: AskFlowPanelProps) {
             Close
           </button>
         </div>
-        <div className="mt-4">
-          <label
-            htmlFor="askflow-input"
-            className="text-xs font-semibold uppercase tracking-wide text-slate-400"
-          >
-            Prompt
-          </label>
-          <textarea
-            ref={textareaRef}
-            id="askflow-input"
+
+        <form onSubmit={handleSubmit} className="mt-4">
+          <input
+            ref={inputRef}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            disabled={loading}
-            rows={4}
-            placeholder={
-              aiEnabled
-                ? "e.g., Summarize tasks blocked in IN PROGRESS."
-                : "AI assist is paused. Flip the feature flag to enable."
-            }
-            className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-[#050B18]/90 p-3 text-sm text-[#E6EDF3] placeholder:text-slate-500 focus:border-white/30 focus:outline-none"
+            onKeyDown={(event) => {
+              // Explicit: implicit form submission is skipped by some
+              // drivers/webviews, and this input is the whole feature.
+              if (event.key === "Enter") handleSubmit(event);
+            }}
+            placeholder='Try "what&apos;s open" or "move the auth thing to done"'
+            className="w-full rounded-2xl border border-white/10 bg-[#050B18]/90 p-3 text-sm text-[#E6EDF3] placeholder:text-slate-500 focus:border-white/30 focus:outline-none"
           />
-          {!aiEnabled ? (
-            <p className="mt-2 text-xs text-amber-300">
-              Set <code>window.__FLOWSTATE_ENABLE_AI = true</code> to activate Flow.
-            </p>
-          ) : null}
-        </div>
-        <div className="mt-4 flex items-center gap-3">
+        </form>
+
+        {result ? (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+            <p>{result.message}</p>
+            {result.listed?.length ? (
+              <ul className="mt-3 space-y-1.5">
+                {result.listed.map((task) => (
+                  <li key={task.id} className="flex items-baseline gap-2 text-slate-300">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      {task.status}
+                    </span>
+                    {task.title}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-slate-500">
+            Board commands only — move, list, rest, restore, add. Colors, the
+            galaxy, and your journal are yours alone.
+          </p>
+        )}
+
+        {undoBoard ? (
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={!aiEnabled || loading || !prompt.trim()}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition disabled:cursor-not-allowed disabled:opacity-40 hover:border-white/40 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            onClick={handleUndo}
+            className="mt-3 rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:bg-white/5"
           >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-transparent"
-                />
-                Sending…
-              </span>
-            ) : (
-              "Send"
-            )}
+            Undo last change
           </button>
-          <button
-            type="button"
-          onClick={() => {
-            setPrompt("");
-            setAnswer(null);
-            setError(null);
-            setLoading(false);
-            setContext([]);
-          }}
-            className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-          >
-            Reset
-          </button>
-        </div>
-        <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-          {!aiEnabled ? (
-            <p className="text-slate-400">
-              Flow assist is cooling off. Leave your prompt, and we’ll be ready when
-              the feature flag flips.
-            </p>
-          ) : loading ? (
-            <div className="flex items-center gap-2 text-slate-400">
-              <span
-                aria-hidden="true"
-                className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-transparent"
-              />
-              Synthesizing…
-            </div>
-          ) : error ? (
-            <p className="text-rose-300">{error}</p>
-          ) : answer ? (
-            <div className="space-y-4">
-              <pre className="whitespace-pre-wrap text-[#E6EDF3]">{answer}</pre>
-              {context.length ? (
-                <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
-                  <p className="mb-2 font-semibold uppercase tracking-wide text-slate-400">
-                    RAG context
-                  </p>
-                  <ul className="space-y-1">
-                    {context.map((entry) => (
-                      <li key={entry} className="text-slate-300">
-                        • {entry}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-slate-400">Responses land here.</p>
-          )}
-        </div>
+        ) : null}
       </div>
     </div>
   );
