@@ -6,6 +6,11 @@ const INTENT_TO_BIOME: Record<UserIntent, BiomeId> = {
   clarity: "mentor",
   lost: "archivist",
   overwhelm: "archivist",
+  nebula: "nebula",
+  supernova: "supernova",
+  aurora: "aurora",
+  void: "void",
+  pulsar: "pulsar",
 };
 
 const getSeason = (timestamp: number): BiomeSeason => {
@@ -26,7 +31,7 @@ export class BiomeManager {
   compute(input: ComputeBiomeInput): BiomeTokens {
     const timestamp = input.timestamp ?? Date.now();
     const season = getSeason(timestamp);
-    const biomeId = this.resolveBiomeId(input.intent, input.metrics);
+    const biomeId = this.resolveBiomeId(input.intent);
     const base = BIOME_REGISTRY[biomeId];
     const particleSpeed = this.computeParticleSpeed(base, input.metrics, season);
     const particleDensity = base.ambientParticles.density * (1 + (input.metrics.avgHeat - 0.5) * 0.2);
@@ -45,13 +50,10 @@ export class BiomeManager {
     };
   }
 
-  private resolveBiomeId(intent: UserIntent, metrics: BiomeMetrics): BiomeId {
-    if (metrics.avgEntropy > 0.65) {
-      return "archivist";
-    }
-    if (metrics.avgHeat > 0.55) {
-      return "hunter";
-    }
+  private resolveBiomeId(intent: UserIntent): BiomeId {
+    // The picker's choice is law. Metrics used to hijack the palette (high
+    // entropy forced archivist, high heat forced hunter), which made the
+    // Colors setting a suggestion rather than a setting.
     return INTENT_TO_BIOME[intent] ?? "mentor";
   }
 

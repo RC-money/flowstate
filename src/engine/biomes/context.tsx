@@ -22,8 +22,12 @@ const BiomeContext = createContext<BiomeContextValue | undefined>(undefined);
 const restoreIntent = (): UserIntent => {
   if (typeof window === "undefined") return DEFAULT_INTENT;
   const stored = window.localStorage.getItem("flowstate:biome-intent");
-  if (stored === "progress" || stored === "clarity" || stored === "lost" || stored === "overwhelm") {
-    return stored;
+  const known = [
+    "progress", "clarity", "lost", "overwhelm",
+    "nebula", "supernova", "aurora", "void", "pulsar",
+  ];
+  if (known.includes(stored ?? "")) {
+    return stored as UserIntent;
   }
   return DEFAULT_INTENT;
 };

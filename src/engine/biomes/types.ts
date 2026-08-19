@@ -1,4 +1,12 @@
-export type BiomeId = "hunter" | "mentor" | "archivist";
+export type BiomeId =
+  | "hunter"
+  | "mentor"
+  | "archivist"
+  | "nebula"
+  | "supernova"
+  | "aurora"
+  | "void"
+  | "pulsar";
 
 export interface BiomeParameters {
   id: BiomeId;
@@ -14,7 +22,16 @@ export interface BiomeParameters {
   accent: string;
 }
 
-export type UserIntent = "progress" | "clarity" | "lost" | "overwhelm";
+export type UserIntent =
+  | "progress"
+  | "clarity"
+  | "lost"
+  | "overwhelm"
+  | "nebula"
+  | "supernova"
+  | "aurora"
+  | "void"
+  | "pulsar";
 
 export interface BiomeMetrics {
   avgHeat: number;
