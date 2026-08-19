@@ -8,7 +8,7 @@ const task = (id: string, tags?: string[], createdAt = NOW): Task => ({
 });
 
 const tagLinks = (tasks: Task[]) =>
-  buildGraphData(tasks, {}).links.filter((l) => l.kind === "tag");
+  buildGraphData(tasks).links.filter((l) => l.kind === "tag");
 
 describe("tag gravity", () => {
   test("two tasks sharing a tag get a tag link", () => {
@@ -26,12 +26,13 @@ describe("tag gravity", () => {
     expect(tagLinks([task("a", ["api"]), task("b", ["design"])])).toHaveLength(0);
   });
 
-  test("a dependency between the same pair wins over the tag link", () => {
+  test("dependency data draws no lines -- only shared tags relate tasks", () => {
     const a = task("a", ["api"]);
     const b = { ...task("b", ["api"]), dependsOn: ["a"] };
-    const data = buildGraphData([a, b], {});
-    expect(data.links.filter((l) => l.kind === "tag")).toHaveLength(0);
-    expect(data.links.filter((l) => l.kind === "dependency")).toHaveLength(1);
+    const data = buildGraphData([a, b]);
+    // dependsOn survives in storage but the galaxy no longer draws it.
+    expect(data.links).toHaveLength(1);
+    expect(data.links[0].kind).toBe("tag");
   });
 
   test("tag comparison is case-insensitive", () => {

@@ -142,8 +142,7 @@ const statusLegendMap: Record<string, LegendKey | undefined> = {
 };
 
 const linkLegendMap: Partial<Record<GraphLink["kind"], LegendKey>> = {
-  dependency: "Dependency",
-  temporal: "Temporal",
+  tag: "Shared tag",
 };
 
 const isLegendKey = (value: unknown): value is LegendKey =>
@@ -212,6 +211,39 @@ const linkKey = (link: GraphLink | LinkObject): string => {
 };
 
 const PREFS_STORAGE_KEY = "flowstate:graph-prefs";
+const LAYOUT_STORAGE_KEY = "flowstate:v1:galaxy-layout";
+
+type SavedLayout = Record<string, { x: number; y: number }>;
+
+const loadLayout = (): SavedLayout => {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LAYOUT_STORAGE_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" ? (parsed as SavedLayout) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveLayoutEntry = (id: string, x: number, y: number): void => {
+  if (typeof window === "undefined") return;
+  try {
+    const layout = loadLayout();
+    layout[id] = { x: Math.round(x), y: Math.round(y) };
+    window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+  } catch {
+    // Storage full: the arrangement just will not stick this once.
+  }
+};
+
+const clearLayout = (): void => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+};
 
 const loadStoredPrefs = (): GraphPreferences => {
   if (typeof window === "undefined") {
@@ -263,17 +295,33 @@ const GraphView: React.FC<GraphViewProps> = ({
   const [activeLegendKeys, setActiveLegendKeys] = useState<Set<LegendKey>>(
     () => new Set<LegendKey>(graphPrefs.legendKeys && graphPrefs.legendKeys.length ? graphPrefs.legendKeys : LEGEND_KEYS)
   );
-  const isLocked = Boolean(graphPrefs.locked);
+  // The lock system suspended physics -- including during warmup, which left
+  // nodes clustered at their random spawn points -- and paused the render
+  // loop, which made panning feel dead. Arrangement is now pinning: drag a
+  // planet and it stays exactly there (persisted); R releases everything.
+  const isLocked = false;
 
 
   const earnedStars = useMemo(
     () => deriveStars([...tasks, ...etherealTasks]),
     [tasks, etherealTasks]
   );
-  const graphData: GraphData = useMemo(
-    () => buildGraphData(tasks, graphPrefs),
-    [tasks, graphPrefs]
-  );
+  const graphData: GraphData = useMemo(() => {
+    const data = buildGraphData(tasks);
+    // Pin nodes where the user left them; unpinned newcomers flow with physics.
+    const layout = loadLayout();
+    data.nodes.forEach((node) => {
+      const saved = layout[node.id];
+      if (saved) {
+        const pinned = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+        pinned.x = saved.x;
+        pinned.y = saved.y;
+        pinned.fx = saved.x;
+        pinned.fy = saved.y;
+      }
+    });
+    return data;
+  }, [tasks]);
   const [nodePositions, setNodePositions] = useState<NodePosition[]>([]);
   const [nodeScreenPositions, setNodeScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
   const autoLockTimer = useRef<number | null>(null);
@@ -441,16 +489,12 @@ const GraphView: React.FC<GraphViewProps> = ({
 
   const lockLayout = useCallback(() => {
     clearAutoLockTimer();
-    setGraphPrefs((prev) => ({ ...prev, locked: true }));
     fgRef.current?.d3AlphaTarget?.(0);
-    fgRef.current?.pauseAnimation?.();
   }, [clearAutoLockTimer]);
 
   const unlockLayout = useCallback(() => {
     clearAutoLockTimer();
-    setGraphPrefs((prev) => ({ ...prev, locked: false, autoLock: false }));
     fgRef.current?.d3AlphaTarget?.(0.3);
-    fgRef.current?.resumeAnimation?.();
     fgRef.current?.d3ReheatSimulation?.();
   }, [clearAutoLockTimer]);
 
@@ -489,18 +533,15 @@ const GraphView: React.FC<GraphViewProps> = ({
     [graphData.nodes.length]
   );
 
-  // Fires when the d3 simulation cools. The mount-time zoomToFit used a
-  // 200ms timer and framed mid-explosion -- nodes kept drifting out of view.
-  // Framing on settle scales the camera to the layout that will actually hold.
-  const didAutoFrameRef = useRef(false);
-  const handleEngineSettled = useCallback(() => {
-    if (didAutoFrameRef.current) return;
-    didAutoFrameRef.current = true;
-    frameGraphToNodes(600);
-  }, [frameGraphToNodes]);
-
   const resetLayout = useCallback(() => {
     clearHover();
+    clearLayout();
+    graphData.nodes.forEach((node) => {
+      const pinned = node as GraphNode & { fx?: number; fy?: number };
+      delete pinned.fx;
+      delete pinned.fy;
+    });
+    fgRef.current?.d3ReheatSimulation?.();
     frameGraphToNodes(400);
   }, [clearHover, frameGraphToNodes]);
 
@@ -756,9 +797,19 @@ const GraphView: React.FC<GraphViewProps> = ({
     handleInteractionStart();
   }, [handleInteractionStart]);
 
-  const handleNodeDragEnd = useCallback(() => {
-    handleInteractionEnd();
-  }, [handleInteractionEnd]);
+  const handleNodeDragEnd = useCallback(
+    (node: GraphNode) => {
+      const positioned = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+      if (typeof positioned.x === "number" && typeof positioned.y === "number") {
+        // Where you drop it is where it stays -- across views and reloads.
+        positioned.fx = positioned.x;
+        positioned.fy = positioned.y;
+        saveLayoutEntry(node.id, positioned.x, positioned.y);
+      }
+      handleInteractionEnd();
+    },
+    [handleInteractionEnd]
+  );
 
   // react-force-graph-2d emits pan events through onZoom callbacks; reuse them for hover clearing.
   const handleZoom = useCallback(
@@ -1230,7 +1281,6 @@ const GraphView: React.FC<GraphViewProps> = ({
             <ForceGraph2D<GraphNode, GraphLink>
               ref={fgRef}
               graphData={graphData}
-              onEngineStop={handleEngineSettled}
               nodeRelSize={6}
               warmupTicks={60}
               backgroundColor="rgba(0,0,0,0)"

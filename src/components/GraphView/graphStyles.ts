@@ -185,39 +185,24 @@ export const drawNode = (
 };
 
 export const getLinkColor = (
-  link: GraphLink,
+  _link: GraphLink,
   highlighted: boolean
-): string => {
-  if (highlighted) return "hsl(var(--accent-cyan))";
-  if (link.kind === "tag") return "rgba(165, 175, 255, 0.16)";
-  return link.kind === "dependency"
-    ? "hsl(var(--muted-strong))"
-    : "hsl(var(--muted))";
-};
+): string => (highlighted ? "hsl(var(--accent-cyan))" : "rgba(165, 175, 255, 0.16)");
 
 export const getLinkWidth = (
-  link: GraphLink,
+  _link: GraphLink,
   highlighted: boolean
-): number => {
-  if (link.kind === "tag") return highlighted ? 1.2 : 0.8;
-  return highlighted || link.kind === "dependency" ? 2 : 1;
-};
+): number => (highlighted ? 1.2 : 0.8);
 
 export const getParticleColor = (
-  link: GraphLink,
+  _link: GraphLink,
   highlighted: boolean
-): string => {
-  if (highlighted) return "hsl(var(--accent-cyan))";
-  return link.kind === "dependency"
-    ? "rgba(148, 197, 253, 0.9)"
-    : "rgba(148, 163, 184, 0.7)";
-};
+): string => (highlighted ? "hsl(var(--accent-cyan))" : "rgba(148, 163, 184, 0.7)");
 
 export const legendSwatches = [
   { label: "To-Do", color: "hsl(var(--accent-cyan))", kind: "node" },
   { label: "In Progress", color: "hsl(var(--accent-indigo))", kind: "node" },
   { label: "Done", color: "hsl(var(--accent-emerald))", kind: "node" },
   { label: "Blocked", color: "hsl(var(--muted-strong))", kind: "node" },
-  { label: "Dependency", color: "hsl(var(--muted-strong))", kind: "link", dashed: false },
-  { label: "Temporal", color: "hsl(var(--muted))", kind: "link", dashed: true },
+  { label: "Shared tag", color: "rgba(165, 175, 255, 0.6)", kind: "link", dashed: true },
 ] as const;

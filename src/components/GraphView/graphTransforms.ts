@@ -19,17 +19,14 @@ export type GraphNode = {
 export type GraphLink = {
   source: string;
   target: string;
-  kind: "dependency" | "temporal" | "tag";
+  /** Only shared tags draw lines now -- relationships the user actually made. */
+  kind: "tag";
 };
 
 export type GraphData = {
   nodes: GraphNode[];
   links: GraphLink[];
 };
-
-export interface TasksToGraphOptions {
-  showTemporal: boolean;
-}
 
 type TaskLike = Task & {
   dependsOn?: unknown;
@@ -72,12 +69,8 @@ const normalizeDependsOn = (value: unknown, currentId: string): string[] => {
 const linkSignature = (link: GraphLink): string =>
   `${link.kind}:${link.source}->${link.target}`;
 
-export const tasksToGraph = (
-  tasks: Task[],
-  opts: TasksToGraphOptions
-): GraphData => {
+export const tasksToGraph = (tasks: Task[]): GraphData => {
   const safeTasks = Array.isArray(tasks) ? (tasks as TaskLike[]) : [];
-  const showTemporal = Boolean(opts?.showTemporal);
 
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
@@ -129,19 +122,6 @@ export const tasksToGraph = (
       updatedAt: parseTimestamp((task as TaskLike).updatedAt),
     });
 
-    dependsOn.forEach((depId) => {
-      if (depId === id) return;
-      const link: GraphLink = {
-        source: depId,
-        target: id,
-        kind: "dependency",
-      };
-      const sig = linkSignature(link);
-      if (!seenLinks.has(sig)) {
-        seenLinks.add(sig);
-        links.push(link);
-      }
-    });
   });
 
   // Tag gravity: tasks sharing a tag are chained oldest-to-newest. A chain
@@ -180,30 +160,8 @@ export const tasksToGraph = (
     }
   });
 
-  if (showTemporal) {
-    statusBuckets.forEach((bucket) => {
-      const sorted = bucket.sort((a, b) => a.updatedAt - b.updatedAt);
-      for (let i = 0; i < sorted.length - 1; i += 1) {
-        const source = sorted[i]?.id;
-        const target = sorted[i + 1]?.id;
-        if (!source || !target || source === target) continue;
-        const link: GraphLink = { source, target, kind: "temporal" };
-        const sig = linkSignature(link);
-        if (!seenLinks.has(sig)) {
-          seenLinks.add(sig);
-          links.push(link);
-        }
-      }
-    });
-  }
 
   return { nodes, links };
 };
 
-export const buildGraphData = (
-  tasks: Task[],
-  prefs?: { showTemporal?: boolean }
-): GraphData => {
-  const showTemporal = Boolean(prefs?.showTemporal);
-  return tasksToGraph(tasks, { showTemporal });
-};
+export const buildGraphData = (tasks: Task[]): GraphData => tasksToGraph(tasks);
