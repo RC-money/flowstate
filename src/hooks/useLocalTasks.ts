@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createTaskStore, hydrateFromStore } from "../lib/storage";
 import { normalizeDates } from "../lib/taskDates";
 import { normalizeSubtasks, type Subtask } from "../lib/subtasks";
 
@@ -35,8 +36,6 @@ export const touchTask = (task: Task, now: number = Date.now()): Task => ({
 
 type Tasks = Task[];
 
-const STORAGE_KEY = "flowstate:v1:tasks";
-
 const isTask = (candidate: unknown): candidate is Task => {
   return (
     Boolean(candidate) &&
@@ -50,7 +49,7 @@ const isTask = (candidate: unknown): candidate is Task => {
   );
 };
 
-const coerceTasks = (payload: unknown): Tasks | null => {
+export const coerceTasks = (payload: unknown): Tasks | null => {
   if (!Array.isArray(payload)) return null;
   const now = Date.now();
   const next: Task[] = [];
@@ -70,41 +69,78 @@ const coerceTasks = (payload: unknown): Tasks | null => {
   return next;
 };
 
+/** What hydration found on disk, for callers that must not act before it lands. */
+export interface HydrationInfo {
+  ready: boolean;
+  storedBoard: Tasks | null;
+}
+
 export const useLocalTasks = (
   initial: Tasks
-): [Tasks, React.Dispatch<React.SetStateAction<Tasks>>] => {
+): [Tasks, React.Dispatch<React.SetStateAction<Tasks>>, HydrationInfo] => {
   const [tasks, setTasks] = useState<Tasks>(initial);
+  const [hydration, setHydration] = useState<HydrationInfo>({
+    ready: false,
+    storedBoard: null,
+  });
+  const storeRef = useRef(createTaskStore());
   const hydratedRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || hydratedRef.current) return;
     hydratedRef.current = true;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const next = coerceTasks(parsed);
-      if (next) {
+    hydrateFromStore(storeRef.current)
+      .then(({ tasks: next, source }) => {
+        if (next) {
+          setTasks(next);
+          console.log(`[flowstate] Tasks hydrated from ${source}`);
+        }
+        setHydration({ ready: true, storedBoard: next });
+      })
+      .catch((error) => {
+        console.error("[flowstate] Hydration failed:", error);
+        setHydration({ ready: true, storedBoard: null });
+      });
+  }, []);
+
+  // Adopt changes made by the MCP server while the app is open. The store
+  // filters the echo of our own writes, so this only fires for real outside
+  // edits (see lib/storage/external.ts).
+  useEffect(() => {
+    const store = storeRef.current;
+    if (!store.watch) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    store
+      .watch((next) => {
         setTasks(next);
-        console.log("[flowstate] Tasks hydrated from localStorage");
-      } else {
-        console.error("[flowstate] Invalid tasks in localStorage; ignoring.");
-      }
-    } catch (error) {
-      console.error("[flowstate] Failed to parse tasks:", error);
-    }
+        window.dispatchEvent(
+          new CustomEvent("flowstate:toast", {
+            detail: { message: "Board updated from outside.", variant: "success" },
+          })
+        );
+      })
+      .then((unwatch) => {
+        if (cancelled) unwatch();
+        else stop = unwatch;
+      })
+      .catch((error) => {
+        console.error("[flowstate] Watch failed:", error);
+      });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
   }, []);
 
   useEffect(() => {
     if (!hydratedRef.current || typeof window === "undefined") return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-      } catch (error) {
+      storeRef.current.save(JSON.stringify(tasks)).catch((error) => {
         console.error("[flowstate] Failed to save tasks:", error);
-      }
+      });
     }, 150);
     return () => {
       if (saveTimer.current) {
@@ -113,7 +149,7 @@ export const useLocalTasks = (
     };
   }, [tasks]);
 
-  return [tasks, setTasks];
+  return [tasks, setTasks, hydration];
 };
 
 export const exportTasks = (tasks: Tasks): string => {
