@@ -37,6 +37,10 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "macOS": {
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "10.15"
     }
   }
 }
