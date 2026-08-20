@@ -26,6 +26,12 @@ export interface Task {
   subtasks?: Subtask[];
   /** Epoch ms. Sent into the Ether: gone from the board, shining in the sky. */
   etheredAt?: number;
+  /**
+   * Which cluster (project) this task belongs to. Optional in the type because
+   * every board saved before clusters existed is missing it; normalization
+   * fills it in on load, so it is always present at runtime.
+   */
+  clusterId?: string;
 }
 
 /** Stamps a task as changed now. Use at every mutation site. */
