@@ -8,7 +8,9 @@ import {
   orbitPeriodMs,
   planetScale,
   moonShells,
+  shellMoonAngle,
   shellOf,
+  shellStartIndex,
   shellOrientation,
   subtaskHeaviness,
 } from "./orbitalMechanics";
@@ -258,5 +260,75 @@ describe("subtaskHeaviness", () => {
     const light = moonOrbitAngle(0, 3, period, 0) - moonOrbitAngle(0, 3, 0, 0);
     const heavy = moonOrbitAngle(0, 3, period, 1) - moonOrbitAngle(0, 3, 0, 1);
     expect(heavy).toBeLessThan(light);
+  });
+});
+
+describe("shellStartIndex", () => {
+  it("marks where each ring begins", () => {
+    // Twelve moons split [4, 4, 4].
+    expect(shellStartIndex(0, 12)).toBe(0);
+    expect(shellStartIndex(1, 12)).toBe(4);
+    expect(shellStartIndex(2, 12)).toBe(8);
+  });
+
+  it("starts at zero for a single ring", () => {
+    expect(shellStartIndex(0, 3)).toBe(0);
+  });
+});
+
+describe("shellMoonAngle", () => {
+  it("spaces a ring's moons evenly around that ring, not the whole set", () => {
+    // Four on a ring must sit a quarter turn apart.
+    const angles = [0, 1, 2, 3].map((i) =>
+      shellMoonAngle({ indexInShell: i, shellSize: 4, shell: 0, now: 0, heaviness: 0 })
+    );
+    for (let i = 1; i < angles.length; i += 1) {
+      expect(angles[i] - angles[i - 1]).toBeCloseTo(Math.PI / 2, 6);
+    }
+  });
+
+  it("puts opposite moons on opposite sides", () => {
+    const a = shellMoonAngle({ indexInShell: 0, shellSize: 2, shell: 0, now: 0, heaviness: 0 });
+    const b = shellMoonAngle({ indexInShell: 1, shellSize: 2, shell: 0, now: 0, heaviness: 0 });
+    expect(Math.abs(b - a)).toBeCloseTo(Math.PI, 6);
+  });
+
+  it("keeps the spacing intact on an outer ring", () => {
+    // The outer ring turns slower, but its moons stay evenly spread.
+    const angles = [0, 1, 2].map((i) =>
+      shellMoonAngle({ indexInShell: i, shellSize: 3, shell: 2, now: 4321, heaviness: 0 })
+    );
+    const gapA = angles[1] - angles[0];
+    const gapB = angles[2] - angles[1];
+    expect(gapA).toBeCloseTo((Math.PI * 2) / 3, 6);
+    expect(gapB).toBeCloseTo(gapA, 6);
+  });
+
+  it("keeps spacing intact regardless of how heavy a moon is", () => {
+    const light = shellMoonAngle({ indexInShell: 0, shellSize: 4, shell: 0, now: 0, heaviness: 0 });
+    const heavy = shellMoonAngle({ indexInShell: 1, shellSize: 4, shell: 0, now: 0, heaviness: 1 });
+    expect(heavy - light).toBeCloseTo(Math.PI / 2, 6);
+  });
+
+  it("turns an outer ring more slowly than an inner one", () => {
+    const t = 6000;
+    const inner =
+      shellMoonAngle({ indexInShell: 0, shellSize: 4, shell: 0, now: t, heaviness: 0 }) -
+      shellMoonAngle({ indexInShell: 0, shellSize: 4, shell: 0, now: 0, heaviness: 0 });
+    const outer =
+      shellMoonAngle({ indexInShell: 0, shellSize: 4, shell: 2, now: t, heaviness: 0 }) -
+      shellMoonAngle({ indexInShell: 0, shellSize: 4, shell: 2, now: 0, heaviness: 0 });
+    expect(outer).toBeLessThan(inner);
+  });
+
+  it("never returns a non-finite angle", () => {
+    const odd = shellMoonAngle({
+      indexInShell: -1,
+      shellSize: 0,
+      shell: -2,
+      now: Number.NaN,
+      heaviness: Number.NaN,
+    });
+    expect(Number.isFinite(odd)).toBe(true);
   });
 });

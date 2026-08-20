@@ -68,11 +68,12 @@ import {
 } from "../../lib/celestialPrefs";
 import {
   moonInclination,
-  moonOrbitAngle,
   moonShells,
   planetScale,
+  shellMoonAngle,
   shellOf,
   shellOrientation,
+  shellStartIndex,
   subtaskHeaviness,
 } from "../../lib/orbitalMechanics";
 
@@ -194,17 +195,22 @@ export const drawNode = (
   const placements = (moons ?? []).map((entry, i) => {
     const shell = shellOf(i, moonCount);
     const orbitR = shellRadius(shell);
-    // One loose end whips around; a crowded task turns slowly. A subtask
-    // carrying more detail is heavier still, and drags its own orbit out.
-    // Outer shells lag further behind, so the shells never move as one block.
-    const angle =
-      moonOrbitAngle(i, moonCount, now, subtaskHeaviness(entry.title)) *
-      (1 - shell * 0.22);
+    // Spacing is a share of this ring alone: four moons on a ring stand a
+    // quarter turn apart however many the planet carries in total. A crowded
+    // ring turns slowly, a heavy subtask slower still, and each ring out lags
+    // again -- all of it in the period, never in the spacing.
+    const size = shells[shell] ?? 1;
+    const angle = shellMoonAngle({
+      indexInShell: i - shellStartIndex(shell, moonCount),
+      shellSize: size,
+      shell,
+      now,
+      heaviness: subtaskHeaviness(entry.title),
+    });
     const depth = Math.sin(angle);
     const nearness = (depth + 1) / 2; // 0 far, 1 near
-    // Each moon rides its own plane, so the swarm has vertical spread rather
-    // than sitting in one flat band.
-    const tilt = moonInclination(i);
+    // Moons on one ring share its plane, so the ring stays a ring.
+    const tilt = moonInclination(shell);
     // Place on the shell's own ellipse, then tip it into the shell's plane.
     const lx = Math.cos(angle) * orbitR;
     const ly = depth * orbitR * tilt;

@@ -204,3 +204,56 @@ export const heliosPosition = (
   const angle = base + rotation;
   return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
 };
+
+/** Index of the first moon on a given ring. */
+export const shellStartIndex = (shell: number, count: number): number => {
+  const shells = moonShells(count);
+  const target = Number.isFinite(shell) ? Math.max(0, Math.floor(shell)) : 0;
+  let start = 0;
+  for (let i = 0; i < Math.min(target, shells.length); i += 1) {
+    start += shells[i];
+  }
+  return start;
+};
+
+/** Each additional ring out slows this much again. */
+const SHELL_LAG = 0.4;
+
+export interface ShellMoonAngleArgs {
+  /** Position within its own ring, not within the whole set. */
+  indexInShell: number;
+  /** How many moons share that ring. */
+  shellSize: number;
+  /** Which ring, inner to outer. */
+  shell: number;
+  now: number;
+  /** 0..1, from how much the subtask says. */
+  heaviness: number;
+}
+
+/**
+ * Where one moon sits on its ring. Spacing is a share of that ring alone --
+ * four moons on a ring stand a quarter turn apart no matter how many other
+ * moons the planet carries. Time is added to the spacing rather than
+ * multiplied through it, so a slower outer ring stays just as evenly spread.
+ */
+export const shellMoonAngle = ({
+  indexInShell,
+  shellSize,
+  shell,
+  now,
+  heaviness,
+}: ShellMoonAngleArgs): number => {
+  const size = Number.isFinite(shellSize) && shellSize > 0 ? Math.floor(shellSize) : 1;
+  const index = Number.isFinite(indexInShell) ? Math.floor(indexInShell) : 0;
+  const ring = Number.isFinite(shell) ? Math.max(0, Math.floor(shell)) : 0;
+  const elapsed = Number.isFinite(now) ? now : 0;
+  const mass = Number.isFinite(heaviness) ? Math.min(1, Math.max(0, heaviness)) : 0;
+
+  const spacing = (index / size) * Math.PI * 2;
+  const period = orbitPeriodMs(size) * (1 + mass * HEAVINESS_DRAG) * (1 + ring * SHELL_LAG);
+  const rotation = (elapsed / period) * Math.PI * 2;
+
+  // Start at the top, as the single-ring case always has.
+  return spacing + rotation - Math.PI / 2;
+};

@@ -5,6 +5,7 @@ import {
   IDENTITY_ROTATION,
   isIdentityRotation,
   rotatePoint,
+  unrotatePoint,
   type ViewRotation,
 } from "./viewRotation";
 
@@ -104,6 +105,32 @@ describe("flowRotationAt", () => {
       expect(Number.isFinite(r.spin)).toBe(true);
       expect(Number.isFinite(r.tilt)).toBe(true);
       expect(Number.isFinite(r.yaw)).toBe(true);
+    }
+  });
+});
+
+describe("unrotatePoint", () => {
+  it("undoes a rotation exactly", () => {
+    const start = { x: 137, y: -58, z: 0 };
+    const r = deg(28, 63, -41);
+    const back = unrotatePoint(rotatePoint(start, r), r);
+    expect(back.x).toBeCloseTo(start.x, 5);
+    expect(back.y).toBeCloseTo(start.y, 5);
+    expect(back.z).toBeCloseTo(start.z, 5);
+  });
+
+  it("is a no-op at identity", () => {
+    const p = unrotatePoint({ x: 12, y: 34, z: 0 }, IDENTITY_ROTATION);
+    expect(p.x).toBeCloseTo(12, 6);
+    expect(p.y).toBeCloseTo(34, 6);
+  });
+
+  it("round-trips on every axis independently", () => {
+    for (const r of [deg(90, 0, 0), deg(0, 90, 0), deg(0, 0, 90)]) {
+      const start = { x: 40, y: 70, z: 0 };
+      const back = unrotatePoint(rotatePoint(start, r), r);
+      expect(back.x).toBeCloseTo(start.x, 5);
+      expect(back.y).toBeCloseTo(start.y, 5);
     }
   });
 });

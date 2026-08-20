@@ -104,3 +104,32 @@ export const flowRotationAt = (now: number, legMs: number): ViewRotation => {
     yaw: from.yaw + (to.yaw - from.yaw) * t,
   };
 };
+
+/**
+ * The inverse of rotatePoint: takes a point as it appears on screen back to
+ * where it lives in the system's own frame. Needed when a drag lands somewhere
+ * and has to be understood as an angle on an orbit rather than a screen point.
+ * Undoes spin, then tilt, then yaw -- the reverse of the order they went on.
+ */
+export const unrotatePoint = (point: Point3, rotation: ViewRotation): Point3 => {
+  const yaw = toRadians(rotation.yaw);
+  const tilt = toRadians(rotation.tilt);
+  const spin = toRadians(rotation.spin);
+
+  const cs = Math.cos(-spin);
+  const ss = Math.sin(-spin);
+  const x1 = point.x * cs - point.y * ss;
+  const y1 = point.x * ss + point.y * cs;
+
+  const ct = Math.cos(-tilt);
+  const st = Math.sin(-tilt);
+  const y2 = y1 * ct - point.z * st;
+  const z2 = y1 * st + point.z * ct;
+
+  const cy = Math.cos(-yaw);
+  const sy = Math.sin(-yaw);
+  const x3 = x1 * cy + z2 * sy;
+  const z3 = -x1 * sy + z2 * cy;
+
+  return { x: x3, y: y2, z: z3 };
+};

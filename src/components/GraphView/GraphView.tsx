@@ -37,6 +37,7 @@ import {
   IDENTITY_ROTATION,
   isIdentityRotation,
   rotatePoint,
+  unrotatePoint,
   type ViewRotation,
 } from "../../lib/viewRotation";
 
@@ -230,6 +231,19 @@ const linkKey = (link: GraphLink | LinkObject): string => {
 const PREFS_STORAGE_KEY = "flowstate:graph-prefs";
 const LAYOUT_STORAGE_KEY = "flowstate:v1:galaxy-layout";
 const HELIOS_STORAGE_KEY = "flowstate:v1:helios";
+const HELIOS_PHASE_KEY = "flowstate:v1:helios-phases";
+const HELIOS_LANE_KEY = "flowstate:v1:helios-lane";
+
+/** Custom angles along the orbit, keyed by task id. */
+const loadHeliosPhases = (): Record<string, number> => {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HELIOS_PHASE_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+};
 
 type SavedLayout = Record<string, { x: number; y: number }>;
 
@@ -595,6 +609,22 @@ const GraphView: React.FC<GraphViewProps> = ({
   const heliosActive = heliosMode;
   const [heliosFrozen, setHeliosFrozen] = useState(false);
   const [keptAt, setKeptAt] = useState<number | null>(null);
+  // Dragging a planet slides it along its lane; the offset is remembered so a
+  // HELIOS arrangement you set by hand survives a reload.
+  const heliosPhasesRef = useRef<Record<string, number>>(loadHeliosPhases());
+  const naturalHeliosAngleRef = useRef<Map<string, number>>(new Map());
+  const [laneWidth, setLaneWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    const raw = Number(window.localStorage.getItem(HELIOS_LANE_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(HELIOS_LANE_KEY, String(laneWidth));
+    } catch {
+      // A theme preference is not worth breaking the view over.
+    }
+  }, [laneWidth]);
   // Three axes of view control: spin turns the table, tilt lifts you above or
   // below the plane, yaw swings it around. Flow drifts between configurations
   // on its own. Applies with or without HELIOS.
@@ -774,13 +804,20 @@ const GraphView: React.FC<GraphViewProps> = ({
         const ring = String(n.status ?? "TO-DO");
         const index = ringSlots.get(ring) ?? 0;
         ringSlots.set(ring, index + 1);
-        const { x, y } = heliosPosition(
+        const base = heliosPosition(
           String(n.id),
           ring,
           now,
           n.subtaskMoons?.length ?? 0,
           { index, total: ringTotals.get(ring) ?? 1 }
         );
+        naturalHeliosAngleRef.current.set(String(n.id), Math.atan2(base.y, base.x));
+        // A hand-placed planet keeps its own angle on the lane.
+        const offset = heliosPhasesRef.current[String(n.id)] ?? 0;
+        const co = Math.cos(offset);
+        const so = Math.sin(offset);
+        const x = base.x * co - base.y * so;
+        const y = base.x * so + base.y * co;
         const p = rotatePoint({ x, y, z: 0 }, rotationRef.current);
         n.x = p.x;
         n.y = p.y;
@@ -812,8 +849,8 @@ const GraphView: React.FC<GraphViewProps> = ({
 
       ctx.save();
       // Orbit lanes first, so the sun sits on top of them.
-      ctx.strokeStyle = "rgba(255,214,140,0.10)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(255,214,140,${Math.min(0.5, 0.08 + laneWidth * 0.045)})`;
+      ctx.lineWidth = laneWidth;
       (["TO-DO", "IN PROGRESS", "DONE"] as const).forEach((status) => {
         ctx.beginPath();
         ctx.arc(0, 0, heliosRadius(status), 0, Math.PI * 2);
@@ -852,7 +889,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       }
       ctx.restore();
     },
-    [heliosActive]
+    [heliosActive, laneWidth]
   );
 
   const resetLayout = useCallback(() => {
@@ -1136,9 +1173,33 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
   }, [debouncedSetHover]);
 
-  const handleNodeDrag = useCallback(() => {
-    handleInteractionStart();
-  }, [handleInteractionStart]);
+  const handleNodeDrag = useCallback(
+    (node?: GraphNode) => {
+      handleInteractionStart();
+      if (!heliosActive || !node) return;
+      const dragged = node as GraphNode & { x?: number; y?: number };
+      // Read the drop point back into the system's own frame, then keep only
+      // its angle: the planet slides along its lane rather than off it.
+      const local = unrotatePoint(
+        { x: dragged.x ?? 0, y: dragged.y ?? 0, z: 0 },
+        rotationRef.current
+      );
+      if (local.x === 0 && local.y === 0) return;
+      const wanted = Math.atan2(local.y, local.x);
+      const natural = naturalHeliosAngleRef.current.get(String(dragged.id));
+      if (natural === undefined) return;
+      heliosPhasesRef.current[String(dragged.id)] = wanted - natural;
+      try {
+        window.localStorage.setItem(
+          HELIOS_PHASE_KEY,
+          JSON.stringify(heliosPhasesRef.current)
+        );
+      } catch {
+        // An arrangement is not worth breaking the view over.
+      }
+    },
+    [handleInteractionStart, heliosActive]
+  );
 
   const handleNodeDragEnd = useCallback(
     (node: GraphNode, translate?: { x: number; y: number }) => {
@@ -1760,7 +1821,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
           <div className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-[11px] text-slate-200 shadow-inner shadow-black/30">
             <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              <span>View</span>
+              <span>Mission control</span>
               <span>{Math.round(zoomLevel * 100)}%</span>
             </div>
             <button
@@ -1777,6 +1838,27 @@ const GraphView: React.FC<GraphViewProps> = ({
             >
               Zoom
             </button>
+            {heliosActive ? (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span>Lanes</span>
+                  <span>{laneWidth.toFixed(1)}</span>
+                </div>
+                <label className="sr-only" htmlFor="helios-lane">
+                  Orbit lane thickness
+                </label>
+                <input
+                  id="helios-lane"
+                  type="range"
+                  min={0.2}
+                  max={6}
+                  step={0.2}
+                  value={laneWidth}
+                  onChange={(event) => setLaneWidth(Number(event.target.value))}
+                  className="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-amber-300"
+                />
+              </div>
+            ) : null}
             <div className="mt-3 space-y-2">
               {(
                 [
