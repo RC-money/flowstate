@@ -103,6 +103,13 @@ interface GraphViewProps {
   onOpenTask(id: string): void;
   onCreateTether?: (sourceId: string, targetId: string) => void;
   onConstellationsChange?: (constellations: Constellation[]) => void;
+  /** Whether the neighbouring clusters are drawn around this one. */
+  showUniverse?: boolean;
+  /** Absent means the legend offers no universe toggle at all. */
+  onToggleUniverse?: () => void;
+  /** The cluster name to offer ending. Absent means it has not earned it. */
+  etherLabel?: string;
+  onEtherCluster?: () => void;
   tethers?: Tether[];
   constellations?: Constellation[];
   prefs?: GraphPreferences;
@@ -139,7 +146,9 @@ const DEFAULT_GRAPH_PREFS: GraphPreferences = {
   showLabels: false,
   labelMode: "hover",
   showStarfield: true,
-  autoLock: true,
+  // Off: the galaxy freezing itself after a few idle seconds is the one thing
+  // this view must never do. Tasks in motion is the whole premise.
+  autoLock: false,
   locked: true,
   idleDrift: false,
   preset: "planning",
@@ -318,6 +327,10 @@ const GraphView: React.FC<GraphViewProps> = ({
   onOpenTask,
   onCreateTether,
   onConstellationsChange,
+  showUniverse,
+  onToggleUniverse,
+  etherLabel,
+  onEtherCluster,
   tethers = [],
   constellations = [],
   prefs,
@@ -2067,6 +2080,54 @@ const GraphView: React.FC<GraphViewProps> = ({
                 );
               })}
             </div>
+            {/* The legend already says what is drawn and what is hidden, so
+                the rest of the universe belongs here rather than as a button
+                floating over the sky. */}
+            {onToggleUniverse ? (
+              <div className="mt-3 border-t border-white/10 pt-3">
+                <button
+                  type="button"
+                  onClick={onToggleUniverse}
+                  aria-pressed={showUniverse}
+                  className="flex w-full items-center justify-between gap-3 text-left text-[10px] font-semibold uppercase tracking-wide transition"
+                >
+                  <span className={showUniverse ? "text-white" : "text-slate-400"}>
+                    Allow universe
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={`h-3 w-6 rounded-full border transition ${
+                      showUniverse
+                        ? "border-[#a5afff] bg-[#7c83ff]/50"
+                        : "border-white/20 bg-white/5"
+                    }`}
+                  >
+                    <span
+                      className={`block h-[10px] w-[10px] rounded-full bg-white transition-transform ${
+                        showUniverse ? "translate-x-[13px]" : "translate-x-[1px]"
+                      }`}
+                    />
+                  </span>
+                </button>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Your other clusters, out around this one.
+                </p>
+
+                {/* Offered only once every task here is finished. Ending the
+                    project from inside it, where you already are when you
+                    finish the last thing. */}
+                {etherLabel && onEtherCluster ? (
+                  <button
+                    type="button"
+                    onClick={onEtherCluster}
+                    className="mt-3 w-full rounded-xl border border-[#c9d0ff]/30 bg-gradient-to-r from-[#5b5cf0]/15 to-[#a5afff]/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#c9d0ff] transition hover:border-[#c9d0ff]/70 hover:text-white"
+                  >
+                    &#10024; Send {etherLabel} to the ether
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="sr-only" aria-live="polite">
               {legendStatusMessage}
             </div>

@@ -3,6 +3,7 @@ import {
   ANDROMEDA_ARMS,
   andromedaPoints,
   projectToDisc,
+  ringSlot,
   spiralPoint,
 } from "./andromeda";
 import { makeCluster, type Cluster } from "./clusters";
@@ -118,6 +119,41 @@ describe("andromedaPoints", () => {
     const clusters = [cluster("a"), cluster("b", { etheredAt: NOW })];
 
     expect(andromedaPoints(clusters, NOW)).toEqual(andromedaPoints(clusters, NOW));
+  });
+});
+
+describe("ringSlot", () => {
+  it("spaces neighbours apart rather than letting them clump", () => {
+    const slots = [0, 1, 2, 3].map((i) => ringSlot("c", i, 4));
+    const angles = slots.map((slot) => slot.angle).sort((a, b) => a - b);
+
+    for (let i = 1; i < angles.length; i += 1) {
+      expect(angles[i] - angles[i - 1]).toBeGreaterThan(0.5);
+    }
+  });
+
+  it("keeps every cluster out at the rim, clear of the middle", () => {
+    for (let i = 0; i < 12; i += 1) {
+      const { radius } = ringSlot(`cluster_${i}`, i, 12);
+
+      expect(radius).toBeGreaterThanOrEqual(0.62);
+      expect(radius).toBeLessThanOrEqual(0.95);
+    }
+  });
+
+  it("gives the same cluster the same place every time", () => {
+    expect(ringSlot("c_abc", 2, 5)).toEqual(ringSlot("c_abc", 2, 5));
+  });
+
+  it("offsets neighbours by their own id so the ring is not a clock face", () => {
+    expect(ringSlot("a", 0, 4).radius).not.toBe(ringSlot("b", 0, 4).radius);
+  });
+
+  it("survives a ring of one", () => {
+    const { angle, radius } = ringSlot("only", 0, 1);
+
+    expect(Number.isFinite(angle)).toBe(true);
+    expect(radius).toBeGreaterThan(0);
   });
 });
 

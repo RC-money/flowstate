@@ -1,5 +1,9 @@
+import { hash32, unit } from "../hash";
 import { decayLevel } from "../orbitalDecay";
 import { armSlot, catalogName, deepFieldPlacement } from "./catalog";
+
+/** Re-exported so a view needs one import for the whole map vocabulary. */
+export { catalogName as catalogNameFor };
 import { isLive, type Cluster } from "./clusters";
 
 /**
@@ -55,6 +59,28 @@ export const projectToDisc = (
   return {
     x: sx * Math.cos(DISC_TILT) - fy * Math.sin(DISC_TILT),
     y: sx * Math.sin(DISC_TILT) + fy * Math.cos(DISC_TILT),
+  };
+};
+
+/**
+ * Where a neighbouring cluster hangs when you are standing inside one of them
+ * and looking out.
+ *
+ * Spaced by index rather than purely by hash: hashing alone clumps, and a ring
+ * of six with two pairs overlapping reads as four. The id only jitters the
+ * angle and sets the distance, so the ring never looks like a clock face while
+ * a given cluster still lands in the same place every time.
+ */
+export const ringSlot = (
+  clusterId: string,
+  index: number,
+  total: number
+): { angle: number; radius: number } => {
+  const span = (Math.PI * 2) / Math.max(1, total);
+  const jitter = (unit(hash32(clusterId, 0x51ed270b)) - 0.5) * span * 0.55;
+  return {
+    angle: index * span + jitter,
+    radius: 0.62 + unit(hash32(clusterId, 0x6a09e667)) * 0.33,
   };
 };
 

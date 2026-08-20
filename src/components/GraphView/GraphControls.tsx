@@ -46,7 +46,6 @@ const GraphControls: React.FC<GraphControlsProps> = ({
     clusterMode = "none",
     showTemporal = false,
     showLabels = false,
-    autoLock = true,
   } = prefs ?? {};
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const presetOptions = useMemo(
@@ -217,21 +216,6 @@ const GraphControls: React.FC<GraphControlsProps> = ({
             </label>
           ))}
         </div>
-        <label className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-[#0F172A]/60 p-3">
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-300">
-              Auto-lock layout
-            </span>
-            <span className="text-[11px] text-slate-400">Freeze nodes after short idle</span>
-          </div>
-          <input
-            type="checkbox"
-            checked={autoLock}
-            onChange={() => onChange({ autoLock: !autoLock })}
-            className="h-5 w-5 cursor-pointer rounded border border-white/30 bg-transparent accent-white"
-            aria-label="Toggle auto-lock layout"
-          />
-        </label>
       </details>
 
       <div className="flex flex-wrap items-center justify-end gap-3">

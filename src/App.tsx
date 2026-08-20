@@ -62,6 +62,7 @@ import {
 } from "./lib/clusters/clusters";
 import AndromedaView from "./components/AndromedaView";
 import ColumnsPanel from "./components/ColumnsPanel";
+import UniverseOverlay from "./components/UniverseOverlay";
 import {
   DEFAULT_COLUMNS,
   addColumn,
@@ -190,6 +191,7 @@ function AppShell() {
   const [andromedaOpen, setAndromedaOpen] = useState(false);
   const [andromedaNaming, setAndromedaNaming] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [showUniverse, setShowUniverse] = useState(false);
   const [dismissedWelcome, setDismissedWelcome] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(WELCOME_KEY) !== null;
@@ -1008,14 +1010,6 @@ function AppShell() {
               &#8984;K
             </button>
 
-            <button
-              type="button"
-              onClick={() => setObservatoryOpen(true)}
-              aria-expanded={observatoryOpen}
-              className="rounded-xl border border-[rgba(165,175,255,0.14)] bg-[rgba(165,175,255,0.05)] px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[#c9d0ff] transition hover:border-[rgba(165,175,255,0.4)] hover:bg-[rgba(165,175,255,0.12)] hover:text-white"
-            >
-              Settings
-            </button>
           </div>
 
         </header>
@@ -1052,19 +1046,41 @@ function AppShell() {
               </DragOverlay>
             </DndContext>
           ) : (
-            <React.Suspense
-              fallback={<div className="min-h-[360px] animate-pulse rounded-3xl border border-white/5 bg-white/[0.02]" />}
-            >
-              <GraphView
-                tasks={visibleTasks}
-                etherealTasks={etherealTasks}
-                onOpenTask={handleOpenTaskById}
-                onCreateTether={handleCreateTether}
-                onConstellationsChange={setConstellations}
-                tethers={tethers}
-                constellations={constellations}
-              />
-            </React.Suspense>
+            <div className="relative">
+              <React.Suspense
+                fallback={<div className="min-h-[360px] animate-pulse rounded-3xl border border-white/5 bg-white/[0.02]" />}
+              >
+                <GraphView
+                  tasks={visibleTasks}
+                  etherealTasks={etherealTasks}
+                  onOpenTask={handleOpenTaskById}
+                  onCreateTether={handleCreateTether}
+                  onConstellationsChange={setConstellations}
+                  tethers={tethers}
+                  constellations={constellations}
+                  showUniverse={showUniverse}
+                  onToggleUniverse={() => setShowUniverse((prev) => !prev)}
+                  etherLabel={
+                    activeCluster && clusterCanEther(activeCluster.id)
+                      ? activeCluster.name
+                      : undefined
+                  }
+                  onEtherCluster={
+                    activeCluster ? () => handleEtherById(activeCluster.id) : undefined
+                  }
+                />
+              </React.Suspense>
+
+              {showUniverse ? (
+                <UniverseOverlay
+                  clusters={clusters}
+                  activeClusterId={activeClusterId}
+                  totalCounts={totalCountsByCluster}
+                  onEnter={handleEnterCluster}
+                />
+              ) : null}
+
+            </div>
           )}
         </div>
 
