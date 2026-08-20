@@ -24,6 +24,7 @@ import TaskModal from "./components/TaskModal";
 const GraphView = React.lazy(() => import("./components/GraphView/GraphView"));
 import NoiseOverlay from "./components/NoiseOverlay";
 import AmbientStars from "./components/AmbientStars";
+import MeteorShower from "./components/MeteorShower";
 import StatusBar from "./components/StatusBar";
 import { useHotkeys } from "./hooks/useHotkeys";
 import { useAmbientAudio } from "./hooks/useAmbientAudio";
@@ -31,8 +32,18 @@ import orbit1Url from "./assets/orbit1.mp3";
 import orbit2Url from "./assets/orbit2.mp3";
 
 const MUSIC_TRACKS: MusicTrack[] = [
-  { id: "orbit-1", label: "Orbit I", src: orbit1Url },
-  { id: "orbit-2", label: "Orbit II", src: orbit2Url },
+  {
+    id: "orbit-1",
+    label: "Orbit I",
+    src: orbit1Url,
+    melody: ["G4", "A4", "C5", "D5", "E5", "D5", "C5", "A4"],
+  },
+  {
+    id: "orbit-2",
+    label: "Orbit II",
+    src: orbit2Url,
+    melody: ["E5", "D5", "C5", "A4", "C5", "D5", "E5", "G5"],
+  },
 ];
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
@@ -122,6 +133,7 @@ export default function App() {
         >
           <NoiseOverlay />
           <AmbientStars />
+          <MeteorShower />
           <AppShell />
         </div>
       </BiomeProvider>
