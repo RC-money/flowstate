@@ -269,20 +269,22 @@ export const drawNode = (
     const moonSprite = MOON_SPRITES[p.entry.moon % MOON_SPRITES.length];
     const ready = Boolean(moonSprite && moonSprite.complete && moonSprite.naturalWidth > 0);
     ctx.save();
-    ctx.globalAlpha = p.entry.done ? 1 : 0.3;
-    if (p.entry.done) {
-      ctx.shadowColor = glowFrom(moonTint, 0.85);
-      ctx.shadowBlur = 7;
-    }
+    ctx.globalAlpha = p.entry.done ? 1 : 0.34;
+    // Every moon carries the colour, finished ones just burn brighter. Glowing
+    // only the finished ones meant a fresh task showed no colour at all, which
+    // read as the setting doing nothing.
+    ctx.shadowColor = glowFrom(moonTint, p.entry.done ? 0.9 : 0.4);
+    ctx.shadowBlur = p.entry.done ? 9 : 4;
     if (ready && moonSprite) {
       ctx.beginPath();
       ctx.arc(p.sx, p.sy, p.moonR, 0, Math.PI * 2);
       ctx.clip();
       ctx.drawImage(moonSprite, p.sx - p.moonR, p.sy - p.moonR, p.moonR * 2, p.moonR * 2);
-      // Wash the sprite toward the column's chosen moon colour without
-      // flattening its craters -- multiply keeps the shading underneath.
-      ctx.globalCompositeOperation = "multiply";
-      ctx.globalAlpha = p.entry.done ? 0.55 : 0.35;
+      // "color" takes the hue and leaves the sprite's own light alone, so the
+      // craters survive. Multiply only ever darkened -- a pale tint did nothing
+      // and a dark one turned the moon to mud, which is why this looked broken.
+      ctx.globalCompositeOperation = "color";
+      ctx.globalAlpha = 1;
       ctx.fillStyle = moonTint;
       ctx.fillRect(p.sx - p.moonR, p.sy - p.moonR, p.moonR * 2, p.moonR * 2);
     } else {
