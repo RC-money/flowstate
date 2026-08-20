@@ -19,7 +19,10 @@ Alternates, if you want a different angle:
 
 ## Price
 
-**$9** — one time. No subscription, no account, no server.
+**$19** — one time. No subscription, no account, no server.
+
+Launch week: **$12** with a discount code. One-time prices are easy to raise
+and painful to lower, so the code is the lever, not the list price.
 
 ---
 
@@ -119,7 +122,7 @@ Different from the listing — this is a person talking, not a product page.
 > behave.
 >
 > No accounts, no server. Your board is a JSON file on your machine.
-> macOS, $9 once.
+> macOS, $19 once.
 
 Post to: Hacker News (Show HN), r/macapps, r/SideProject. Lead with the galaxy
 screenshot everywhere.
