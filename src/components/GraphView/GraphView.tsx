@@ -478,6 +478,26 @@ const GraphView: React.FC<GraphViewProps> = ({
   }, [emitStarfieldEvent]);
   const rafRef = useRef<number | undefined>(undefined);
   const graphViewportRef = useRef<HTMLDivElement | null>(null);
+  // Without explicit dimensions react-force-graph sizes itself to the window,
+  // so its centre sat well below the middle of the visible galaxy and every
+  // centreing call landed low. Measure the container and tell it the truth.
+  const [graphSize, setGraphSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = graphViewportRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setGraphSize((prev) => {
+        const w = Math.max(1, Math.round(rect.width));
+        const h = Math.max(1, Math.round(rect.height));
+        return prev.w === w && prev.h === h ? prev : { w, h };
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
     if (typeof window === "undefined" || typeof window.matchMedia === "undefined") {
       return false;
@@ -1567,6 +1587,8 @@ const GraphView: React.FC<GraphViewProps> = ({
               // Subtask moons orbit on the clock, so the canvas has to keep
               // painting after the simulation settles -- the default pauses
               // redraw once nothing moves, which froze them mid-orbit.
+              width={graphSize.w || undefined}
+              height={graphSize.h || undefined}
               autoPauseRedraw={false}
               onRenderFramePre={(ctx: CanvasRenderingContext2D) => drawHelios(ctx)}
               enableZoomInteraction={scrollZoomEnabled}
@@ -1749,7 +1771,14 @@ const GraphView: React.FC<GraphViewProps> = ({
             <div className="mt-3 flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => (heliosActive ? frameHelios(600) : frameGraphToNodes(600, 60))}
+                onClick={() => {
+                  // Fit means "show me all of it, straight on": square the view
+                  // up as well as centring it.
+                  setFlowOn(false);
+                  setRotation(IDENTITY_ROTATION);
+                  if (heliosActive) frameHelios(600);
+                  else frameGraphToNodes(600, 60);
+                }}
                 className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10"
               >
                 Fit to galaxy
