@@ -13,7 +13,7 @@ export type GraphNode = {
   decay?: number;
   subtaskTotal?: number;
   subtaskDone?: number;
-  subtaskMoons?: Array<{ moon: number; done: boolean }>;
+  subtaskMoons?: Array<{ moon: number; done: boolean; title?: string }>;
 };
 
 export type GraphLink = {
@@ -110,7 +110,7 @@ export const tasksToGraph = (tasks: Task[]): GraphData => {
         ? {
             subtaskTotal: subtasks.length,
             subtaskDone: subtasks.filter((s) => s.done).length,
-            subtaskMoons: subtasks.map((s) => ({ moon: s.moon ?? 0, done: s.done })),
+            subtaskMoons: subtasks.map((s) => ({ moon: s.moon ?? 0, done: s.done, title: s.title })),
           }
         : {}),
     });

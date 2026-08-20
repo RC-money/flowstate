@@ -62,7 +62,13 @@ import {
   type SkinId,
   type StatusKey,
 } from "../../lib/celestialPrefs";
-import { hasRings, moonOrbitAngle, planetScale } from "../../lib/orbitalMechanics";
+import {
+  hasRings,
+  moonInclination,
+  moonOrbitAngle,
+  planetScale,
+  subtaskHeaviness,
+} from "../../lib/orbitalMechanics";
 
 type ColumnID = Task["status"] extends string ? Task["status"] : string;
 
@@ -173,14 +179,18 @@ export const drawNode = (
   // sin(angle) is the depth: +1 is nearest the viewer, -1 is furthest.
   const orbitR = radius * 1.9;
   const placements = (moons ?? []).map((entry, i) => {
-    // One loose end whips around; a crowded task turns slowly.
-    const angle = moonOrbitAngle(i, moonCount, now);
+    // One loose end whips around; a crowded task turns slowly. A subtask
+    // carrying more detail is heavier still, and drags its own orbit out.
+    const angle = moonOrbitAngle(i, moonCount, now, subtaskHeaviness(entry.title));
     const depth = Math.sin(angle);
     const nearness = (depth + 1) / 2; // 0 far, 1 near
+    // Each moon rides its own plane, so the swarm has vertical spread rather
+    // than sitting in one flat band.
+    const tilt = moonInclination(i);
     return {
       entry,
       sx: planetCenterX + Math.cos(angle) * orbitR,
-      sy: planetCenterY + depth * orbitR * ORBIT_TILT,
+      sy: planetCenterY + depth * orbitR * tilt,
       // Near moons read bigger; the parallax is what sells the tilt.
       moonR: Math.max(1.8, radius * 0.3 * (0.76 + 0.36 * nearness)),
       inFront: depth > 0,
