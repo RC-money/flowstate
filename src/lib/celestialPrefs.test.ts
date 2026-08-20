@@ -7,6 +7,8 @@ import {
   randomizeCelestialPrefs,
   SKINS,
   skinById,
+  SUNS,
+  sunById,
   STATUS_KEYS,
 } from "./celestialPrefs";
 
@@ -145,5 +147,79 @@ describe("randomizeCelestialPrefs", () => {
         expect(prefs.moonTints[key]).toMatch(/^#[0-9a-f]{6}$/i);
       }
     }
+  });
+});
+
+describe("SUNS", () => {
+  it("offers a spread of stars", () => {
+    expect(SUNS.length).toBeGreaterThan(4);
+  });
+
+  it("leads with Sol, which stays the default", () => {
+    expect(SUNS[0].id).toBe("sol");
+    expect(DEFAULT_CELESTIAL_PREFS.sun).toBe("sol");
+  });
+
+  it("gives every star a label and a glow that reads on black", () => {
+    for (const sun of SUNS) {
+      expect(sun.label.length).toBeGreaterThan(0);
+      expect(sun.glow).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+
+  it("has no duplicate ids", () => {
+    expect(new Set(SUNS.map((s) => s.id)).size).toBe(SUNS.length);
+  });
+});
+
+describe("sunById", () => {
+  it("finds a known star", () => {
+    expect(sunById("sapphire").id).toBe("sapphire");
+  });
+
+  it("falls back to Sol rather than returning undefined", () => {
+    expect(sunById("not-a-star").id).toBe("sol");
+  });
+});
+
+describe("normalizeCelestialPrefs with a sun", () => {
+  it("keeps a known star", () => {
+    expect(normalizeCelestialPrefs({ sun: "frost" }).sun).toBe("frost");
+  });
+
+  it("repairs an unknown star back to Sol", () => {
+    expect(normalizeCelestialPrefs({ sun: "banana" }).sun).toBe("sol");
+    expect(normalizeCelestialPrefs({ sun: 42 }).sun).toBe("sol");
+  });
+
+  it("does not lose the star when another field is broken", () => {
+    const result = normalizeCelestialPrefs({ sun: "cinder", starColor: "nope" });
+    expect(result.sun).toBe("cinder");
+    expect(result.starColor).toBe(DEFAULT_CELESTIAL_PREFS.starColor);
+  });
+});
+
+describe("moonGlow toggle", () => {
+  it("is on by default", () => {
+    expect(DEFAULT_CELESTIAL_PREFS.moonGlow).toBe(true);
+  });
+
+  it("keeps an explicit false", () => {
+    expect(normalizeCelestialPrefs({ moonGlow: false }).moonGlow).toBe(false);
+  });
+
+  it("keeps an explicit true", () => {
+    expect(normalizeCelestialPrefs({ moonGlow: true }).moonGlow).toBe(true);
+  });
+
+  it("repairs a non-boolean back to on", () => {
+    expect(normalizeCelestialPrefs({ moonGlow: "yes" }).moonGlow).toBe(true);
+    expect(normalizeCelestialPrefs({ moonGlow: 0 }).moonGlow).toBe(true);
+  });
+
+  it("does not lose the toggle when another field is broken", () => {
+    const result = normalizeCelestialPrefs({ moonGlow: false, sun: "banana" });
+    expect(result.moonGlow).toBe(false);
+    expect(result.sun).toBe("sol");
   });
 });

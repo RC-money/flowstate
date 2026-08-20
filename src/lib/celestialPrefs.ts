@@ -50,12 +50,52 @@ const SKIN_BY_ID = new Map<string, Skin>(SKINS.map((skin) => [skin.id, skin]));
 /** Never returns undefined -- an unknown id falls back to the first skin. */
 export const skinById = (id: string): Skin => SKIN_BY_ID.get(id) ?? SKINS[0];
 
+export type SunId =
+  | "sol"
+  | "corona"
+  | "furnace"
+  | "cinder"
+  | "alabaster"
+  | "frost"
+  | "sapphire";
+
+export interface Sun {
+  id: SunId;
+  label: string;
+  /** Colour of the corona thrown around the star. */
+  glow: string;
+}
+
+/**
+ * The star at the centre of HELIOS, running the stellar sequence from cool red
+ * through to hot blue. Sol is the one rendered from the source model and stays
+ * the default -- the others are a choice, not a correction.
+ */
+export const SUNS: readonly Sun[] = [
+  { id: "sol", label: "Sol", glow: "#ffce5c" },
+  { id: "corona", label: "Corona", glow: "#ffd75e" },
+  { id: "furnace", label: "Furnace", glow: "#ff8d2e" },
+  { id: "cinder", label: "Cinder", glow: "#ff4d3d" },
+  { id: "alabaster", label: "Alabaster", glow: "#e8f1ff" },
+  { id: "frost", label: "Frost", glow: "#9fd0ff" },
+  { id: "sapphire", label: "Sapphire", glow: "#4aa8ff" },
+] as const;
+
+const SUN_BY_ID = new Map<string, Sun>(SUNS.map((sun) => [sun.id, sun]));
+
+/** Never returns undefined -- an unknown id falls back to Sol. */
+export const sunById = (id: string): Sun => SUN_BY_ID.get(id) ?? SUNS[0];
+
 export interface CelestialPrefs {
   statusSkins: Record<StatusKey, SkinId>;
   /** Colour the subtask moons orbiting a column's planets. */
   moonTints: Record<StatusKey, string>;
   /** Fill for the subtask starbursts on board chips. */
   starColor: string;
+  /** Which star burns at the centre of HELIOS. */
+  sun: SunId;
+  /** Whether subtask moons throw light, or sit as plain bodies. */
+  moonGlow: boolean;
 }
 
 export const DEFAULT_CELESTIAL_PREFS: CelestialPrefs = {
@@ -73,6 +113,8 @@ export const DEFAULT_CELESTIAL_PREFS: CelestialPrefs = {
     DONE: "#f7e28b",
   },
   starColor: "#ffce5c",
+  sun: "sol",
+  moonGlow: true,
 };
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -113,7 +155,15 @@ export const normalizeCelestialPrefs = (raw: unknown): CelestialPrefs => {
       ? colorRaw
       : DEFAULT_CELESTIAL_PREFS.starColor;
 
-  return { statusSkins, moonTints, starColor };
+  const sunRaw = raw.sun;
+  const sun =
+    typeof sunRaw === "string" && SUN_BY_ID.has(sunRaw)
+      ? (sunRaw as SunId)
+      : DEFAULT_CELESTIAL_PREFS.sun;
+
+  const moonGlow = typeof raw.moonGlow === "boolean" ? raw.moonGlow : DEFAULT_CELESTIAL_PREFS.moonGlow;
+
+  return { statusSkins, moonTints, starColor, sun, moonGlow };
 };
 
 export const accentForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
@@ -150,5 +200,11 @@ export const randomizeCelestialPrefs = (
     moonTints[key] = pick(SKINS, random).accent;
   }
 
-  return { statusSkins, moonTints, starColor: pick(SKINS, random).accent };
+  return {
+    statusSkins,
+    moonTints,
+    starColor: pick(SKINS, random).accent,
+    sun: pick(SUNS, random).id,
+    moonGlow: true,
+  };
 };

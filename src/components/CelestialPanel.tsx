@@ -4,7 +4,10 @@ import {
   SKINS,
   STATUS_KEYS,
   skinById,
+  SUNS,
+  sunById,
   type SkinId,
+  type SunId,
 } from "../lib/celestialPrefs";
 import NovaStar from "./NovaStar";
 
@@ -81,30 +84,104 @@ const CelestialPanel = () => {
                     />
                   );
                 })}
-                <label
-                  className="ml-1 inline-flex items-center gap-1.5"
-                  title={`Moon colour for ${status}`}
-                >
-                  <span className="text-[9px] uppercase tracking-wide text-slate-500">
-                    Moons
-                  </span>
-                  <input
-                    type="color"
-                    aria-label={`Moon colour for ${status}`}
-                    value={expandHex(prefs.moonTints[status])}
-                    onChange={(event) =>
-                      setPrefs({
-                        ...prefs,
-                        moonTints: { ...prefs.moonTints, [status]: event.target.value },
-                      })
-                    }
-                    className="h-6 w-8 cursor-pointer rounded-md border border-white/15 bg-transparent [color-scheme:dark]"
-                  />
-                </label>
               </div>
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+            Moon glow
+          </p>
+          <button
+            type="button"
+            aria-pressed={prefs.moonGlow}
+            onClick={() => setPrefs({ ...prefs, moonGlow: !prefs.moonGlow })}
+            className={[
+              "shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition",
+              prefs.moonGlow
+                ? "border-amber-300/70 bg-amber-400/15 text-amber-100"
+                : "border-white/15 text-slate-400 hover:bg-white/10",
+            ].join(" ")}
+          >
+            {prefs.moonGlow ? "Glow on" : "Glow off"}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          What a subtask burns as it orbits. One colour per column; the glow
+          itself can be switched off for flat bodies.
+        </p>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {STATUS_KEYS.map((status) => (
+            <label key={status} className="flex flex-col gap-1.5">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-slate-400">
+                {status}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  aria-label={`Moon glow for ${status}`}
+                  value={expandHex(prefs.moonTints[status])}
+                  onChange={(event) =>
+                    setPrefs({
+                      ...prefs,
+                      moonTints: { ...prefs.moonTints, [status]: event.target.value },
+                    })
+                  }
+                  className="h-7 w-9 cursor-pointer rounded-lg border border-white/15 bg-transparent [color-scheme:dark]"
+                />
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-full"
+                  style={{
+                    backgroundColor: prefs.moonTints[status],
+                    boxShadow: prefs.moonGlow ? `0 0 7px ${prefs.moonTints[status]}` : "none",
+                  }}
+                />
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+            The sun
+          </p>
+          <span className="text-[10px] uppercase tracking-wide text-slate-500">
+            {sunById(prefs.sun).label}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          What burns at the centre in Helios.
+        </p>
+        <div role="group" aria-label="Sun" className="mt-2 flex flex-wrap gap-1.5">
+          {SUNS.map((sun) => {
+            const selected = sun.id === prefs.sun;
+            return (
+              <button
+                key={sun.id}
+                type="button"
+                title={sun.label}
+                aria-label={sun.label}
+                aria-pressed={selected}
+                onClick={() => setPrefs({ ...prefs, sun: sun.id as SunId })}
+                className={[
+                  "h-6 w-6 rounded-full border transition",
+                  selected
+                    ? "border-white/80 ring-2 ring-white/30"
+                    : "border-white/15 hover:border-white/50",
+                ].join(" ")}
+                style={{
+                  background: `radial-gradient(circle at 35% 35%, #ffffff 0%, ${sun.glow} 55%, ${sun.glow}00 100%), ${sun.glow}`,
+                }}
+              />
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-5 border-t border-white/10 pt-4">

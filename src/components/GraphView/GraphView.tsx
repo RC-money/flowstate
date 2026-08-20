@@ -22,7 +22,7 @@ import {
   getParticleColor,
   legendSwatches,
   setGraphViewRotation,
-  SUN_SPRITE,
+  sunSpriteFor,
 } from "./graphStyles";
 import Starfield from "./Starfield";
 import NovaStar from "../NovaStar";
@@ -33,6 +33,8 @@ import { analyzeConstellations } from "../../engine/constellations/analyzer";
 import { deriveStars } from "../../lib/earnedStars";
 import { heliosPosition, heliosRadius } from "../../lib/orbitalMechanics";
 import { latticeColumnIndex, latticePosition } from "../../lib/latticeLayout";
+import { getCelestialPrefs } from "../../lib/celestialStore";
+import { sunById } from "../../lib/celestialPrefs";
 import {
   flowRotationAt,
   IDENTITY_ROTATION,
@@ -875,25 +877,26 @@ const GraphView: React.FC<GraphViewProps> = ({
         ctx.stroke();
       });
 
+      const glow = sunById(getCelestialPrefs().sun).glow;
       const corona = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 4.2);
-      corona.addColorStop(0, "rgba(255,206,92,0.42)");
-      corona.addColorStop(0.4, "rgba(255,141,46,0.16)");
-      corona.addColorStop(1, "rgba(255,120,40,0)");
+      corona.addColorStop(0, `${glow}6b`);
+      corona.addColorStop(0.4, `${glow}29`);
+      corona.addColorStop(1, `${glow}00`);
       ctx.fillStyle = corona;
       ctx.beginPath();
       ctx.arc(0, 0, r * 4.2, 0, Math.PI * 2);
       ctx.fill();
 
-      const sunReady = Boolean(
-        SUN_SPRITE && SUN_SPRITE.complete && SUN_SPRITE.naturalWidth > 0
-      );
-      if (sunReady && SUN_SPRITE) {
+      const star = sunById(getCelestialPrefs().sun);
+      const sprite = sunSpriteFor(star.id);
+      const sunReady = Boolean(sprite && sprite.complete && sprite.naturalWidth > 0);
+      if (sunReady && sprite) {
         // The portrait, clipped to the disc so the corona reads as its own light.
         ctx.save();
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.clip();
-        ctx.drawImage(SUN_SPRITE, -r, -r, r * 2, r * 2);
+        ctx.drawImage(sprite, -r, -r, r * 2, r * 2);
         ctx.restore();
       } else {
         const body = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);

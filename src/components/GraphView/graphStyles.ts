@@ -1,5 +1,11 @@
 import type { Task } from "../../App";
-import sunUrl from "../../assets/planets/sun.png";
+import solUrl from "../../assets/suns/sol.png";
+import coronaUrl from "../../assets/suns/corona.png";
+import furnaceUrl from "../../assets/suns/furnace.png";
+import cinderUrl from "../../assets/suns/cinder.png";
+import alabasterUrl from "../../assets/suns/alabaster.png";
+import frostUrl from "../../assets/suns/frost.png";
+import sapphireUrl from "../../assets/suns/sapphire.png";
 import moon0 from "../../assets/moons/moon0.png";
 import moon1 from "../../assets/moons/moon1.png";
 import moon2 from "../../assets/moons/moon2.png";
@@ -26,8 +32,22 @@ const MOON_SPRITES: Array<HTMLImageElement | null> = [
  * Every body a column can fly. Moons double as planets -- at planet scale they
  * read as small dense worlds, which is exactly what a moon portrait is.
  */
-/** The HELIOS sun, rendered from the source GLB at 256px like the planets. */
-export const SUN_SPRITE: HTMLImageElement | null = loadSprite(sunUrl);
+/**
+ * The stars HELIOS can burn. Sol is rendered from the source GLB at 256px like
+ * the planets; the rest are portraits at the same size.
+ */
+const SUN_SPRITES: Record<SunId, HTMLImageElement | null> = {
+  sol: loadSprite(solUrl),
+  corona: loadSprite(coronaUrl),
+  furnace: loadSprite(furnaceUrl),
+  cinder: loadSprite(cinderUrl),
+  alabaster: loadSprite(alabasterUrl),
+  frost: loadSprite(frostUrl),
+  sapphire: loadSprite(sapphireUrl),
+};
+
+export const sunSpriteFor = (id: SunId): HTMLImageElement | null =>
+  SUN_SPRITES[id] ?? SUN_SPRITES.sol;
 
 const SKIN_SPRITES: Record<SkinId, HTMLImageElement | null> = {
   moon0: MOON_SPRITES[0],
@@ -75,6 +95,7 @@ import {
   skinById,
   type SkinId,
   type StatusKey,
+  type SunId,
 } from "../../lib/celestialPrefs";
 import { rotatePoint, IDENTITY_ROTATION, type ViewRotation } from "../../lib/viewRotation";
 import {
@@ -248,20 +269,24 @@ export const drawNode = (
     const moonSprite = MOON_SPRITES[p.entry.moon % MOON_SPRITES.length];
     const ready = Boolean(moonSprite && moonSprite.complete && moonSprite.naturalWidth > 0);
     ctx.save();
-    ctx.globalAlpha = p.entry.done ? 1 : 0.3;
-    if (p.entry.done) {
-      ctx.shadowColor = glowFrom(moonTint, 0.85);
-      ctx.shadowBlur = 7;
+    ctx.globalAlpha = p.entry.done ? 1 : 0.34;
+    // Every moon carries the colour, finished ones just burn brighter. Glowing
+    // only the finished ones meant a fresh task showed no colour at all, which
+    // read as the setting doing nothing.
+    if (prefs.moonGlow) {
+      ctx.shadowColor = glowFrom(moonTint, p.entry.done ? 0.9 : 0.4);
+      ctx.shadowBlur = p.entry.done ? 9 : 4;
     }
     if (ready && moonSprite) {
       ctx.beginPath();
       ctx.arc(p.sx, p.sy, p.moonR, 0, Math.PI * 2);
       ctx.clip();
       ctx.drawImage(moonSprite, p.sx - p.moonR, p.sy - p.moonR, p.moonR * 2, p.moonR * 2);
-      // Wash the sprite toward the column's chosen moon colour without
-      // flattening its craters -- multiply keeps the shading underneath.
-      ctx.globalCompositeOperation = "multiply";
-      ctx.globalAlpha = p.entry.done ? 0.55 : 0.35;
+      // "color" takes the hue and leaves the sprite's own light alone, so the
+      // craters survive. Multiply only ever darkened -- a pale tint did nothing
+      // and a dark one turned the moon to mud, which is why this looked broken.
+      ctx.globalCompositeOperation = "color";
+      ctx.globalAlpha = 1;
       ctx.fillStyle = moonTint;
       ctx.fillRect(p.sx - p.moonR, p.sy - p.moonR, p.moonR * 2, p.moonR * 2);
     } else {
