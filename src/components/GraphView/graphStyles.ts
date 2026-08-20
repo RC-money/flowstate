@@ -1,7 +1,4 @@
 import type { Task } from "../../App";
-import bluePlanetUrl from "../../assets/planets/blue.png";
-import orangePlanetUrl from "../../assets/planets/orange.png";
-import greenPlanetUrl from "../../assets/planets/green.png";
 import moon0 from "../../assets/moons/moon0.png";
 import moon1 from "../../assets/moons/moon1.png";
 import moon2 from "../../assets/moons/moon2.png";
@@ -20,16 +17,52 @@ const loadSprite = (url: string): HTMLImageElement | null => {
   return img;
 };
 
-const PLANET_SPRITES: Record<string, HTMLImageElement | null> = {
-  "TO-DO": loadSprite(bluePlanetUrl),
-  "IN PROGRESS": loadSprite(orangePlanetUrl),
-  DONE: loadSprite(greenPlanetUrl),
-};
-
 const MOON_SPRITES: Array<HTMLImageElement | null> = [
   moon0, moon1, moon2, moon3, moon4, moon5, moon6,
 ].map(loadSprite);
+
+/**
+ * Every body a column can fly. Moons double as planets -- at planet scale they
+ * read as small dense worlds, which is exactly what a moon portrait is.
+ */
+const SKIN_SPRITES: Record<SkinId, HTMLImageElement | null> = {
+  moon0: MOON_SPRITES[0],
+  moon1: MOON_SPRITES[1],
+  moon2: MOON_SPRITES[2],
+  moon3: MOON_SPRITES[3],
+  moon4: MOON_SPRITES[4],
+  moon5: MOON_SPRITES[5],
+  moon6: MOON_SPRITES[6],
+};
+
+/**
+ * How far the orbital plane is tipped away from edge-on. 1 would be a flat
+ * circle seen face-on (no front or back); 0 an invisible edge. This reads as a
+ * shallow tilt, which is what gives moons a near and a far side.
+ */
+const ORBIT_TILT = 0.42;
+
+/** Expands #rrggbb into an rgba() glow at the given alpha. */
+const glowFrom = (hex: string, alpha: number): string => {
+  const full =
+    hex.length === 4
+      ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+      : hex;
+  const r = parseInt(full.slice(1, 3), 16);
+  const g = parseInt(full.slice(3, 5), 16);
+  const b = parseInt(full.slice(5, 7), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return `rgba(148,163,184,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
 import type { GraphLink, GraphNode } from "./graphTransforms";
+import { getCelestialPrefs } from "../../lib/celestialStore";
+import {
+  moonTintForStatus,
+  skinById,
+  type SkinId,
+  type StatusKey,
+} from "../../lib/celestialPrefs";
+import { hasRings, moonOrbitAngle, planetScale } from "../../lib/orbitalMechanics";
 
 type ColumnID = Task["status"] extends string ? Task["status"] : string;
 
@@ -81,11 +114,21 @@ export const drawNode = (
   ctx: CanvasRenderingContext2D,
   opts: { globalScale: number; highlighted: boolean; hovered: boolean }
 ) => {
-  const radius = getCoreRadius(node, opts.globalScale);
   const statusKey = (node.status ?? "TO-DO") as keyof typeof STATUS_COLORS;
-  const palette = STATUS_COLORS[statusKey] ?? STATUS_COLORS["TO-DO"];
+  const moons = node.subtaskMoons;
+  const moonCount = moons?.length ?? 0;
+
+  // A task carrying subtasks has more mass, so its body swells. Bodies only
+  // ever grow from the base size -- they stay chubby, never pinched.
+  const radius = getCoreRadius(node, opts.globalScale) * planetScale(moonCount);
+
+  const prefs = getCelestialPrefs();
+  const skin = skinById(prefs.statusSkins[statusKey as StatusKey]);
+  const moonTint = moonTintForStatus(prefs, statusKey as StatusKey);
+  const palette = { core: skin.accent, glow: glowFrom(skin.accent, 0.45) };
   const planetCenterX = node.x ?? 0;
   const planetCenterY = node.y ?? 0;
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
 
   const decay = node.decay ?? 0;
   const vitality = 1 - decay * 0.72; // fully decayed bodies keep a faint ember
@@ -101,7 +144,7 @@ export const drawNode = (
   ctx.closePath();
   ctx.restore();
 
-  const sprite = PLANET_SPRITES[statusKey] ?? null;
+  const sprite = SKIN_SPRITES[skin.id] ?? null;
   const spriteReady = Boolean(sprite && sprite.complete && sprite.naturalWidth > 0);
 
   const gradient = ctx.createRadialGradient(
@@ -124,36 +167,78 @@ export const drawNode = (
   // Subtasks orbit as their own moons -- each was dealt one at random when it
   // was created. Done moons at full presence with a warm glow; pending ones
   // are dim silhouettes waiting to be lit.
-  const moons = node.subtaskMoons;
-  if (moons && moons.length > 0) {
-    const orbitR = radius * 1.9;
-    moons.forEach((entry, i) => {
-      const angle = (i / moons.length) * Math.PI * 2 - Math.PI / 2;
-      const sx = planetCenterX + Math.cos(angle) * orbitR;
-      const sy = planetCenterY + Math.sin(angle) * orbitR;
-      const moonR = Math.max(2, radius * 0.32);
-      const sprite = MOON_SPRITES[entry.moon % MOON_SPRITES.length];
-      const ready = Boolean(sprite && sprite.complete && sprite.naturalWidth > 0);
-      ctx.save();
-      ctx.globalAlpha = entry.done ? 1 : 0.3;
-      if (entry.done) {
-        ctx.shadowColor = "rgba(247,226,139,0.85)";
-        ctx.shadowBlur = 7;
-      }
-      if (ready && sprite) {
-        ctx.beginPath();
-        ctx.arc(sx, sy, moonR, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(sprite, sx - moonR, sy - moonR, moonR * 2, moonR * 2);
-      } else {
-        ctx.fillStyle = entry.done ? "#f7e28b" : "rgba(148,163,184,0.6)";
-        ctx.beginPath();
-        ctx.arc(sx, sy, moonR * 0.7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    });
-  }
+  //
+  // The orbit is a tilted plane rather than a flat ring, so a moon passes
+  // behind the planet on the far side and in front of it on the near side.
+  // sin(angle) is the depth: +1 is nearest the viewer, -1 is furthest.
+  const orbitR = radius * 1.9;
+  const placements = (moons ?? []).map((entry, i) => {
+    // One loose end whips around; a crowded task turns slowly.
+    const angle = moonOrbitAngle(i, moonCount, now);
+    const depth = Math.sin(angle);
+    const nearness = (depth + 1) / 2; // 0 far, 1 near
+    return {
+      entry,
+      sx: planetCenterX + Math.cos(angle) * orbitR,
+      sy: planetCenterY + depth * orbitR * ORBIT_TILT,
+      // Near moons read bigger; the parallax is what sells the tilt.
+      moonR: Math.max(1.8, radius * 0.3 * (0.76 + 0.36 * nearness)),
+      inFront: depth > 0,
+    };
+  });
+
+  const drawMoon = (p: (typeof placements)[number]) => {
+    const moonSprite = MOON_SPRITES[p.entry.moon % MOON_SPRITES.length];
+    const ready = Boolean(moonSprite && moonSprite.complete && moonSprite.naturalWidth > 0);
+    ctx.save();
+    ctx.globalAlpha = p.entry.done ? 1 : 0.3;
+    if (p.entry.done) {
+      ctx.shadowColor = glowFrom(moonTint, 0.85);
+      ctx.shadowBlur = 7;
+    }
+    if (ready && moonSprite) {
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, p.moonR, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(moonSprite, p.sx - p.moonR, p.sy - p.moonR, p.moonR * 2, p.moonR * 2);
+      // Wash the sprite toward the column's chosen moon colour without
+      // flattening its craters -- multiply keeps the shading underneath.
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = p.entry.done ? 0.55 : 0.35;
+      ctx.fillStyle = moonTint;
+      ctx.fillRect(p.sx - p.moonR, p.sy - p.moonR, p.moonR * 2, p.moonR * 2);
+    } else {
+      ctx.fillStyle = p.entry.done ? moonTint : "rgba(148,163,184,0.6)";
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, p.moonR * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  /** Half of the ring band, in the same tilted plane as the moons. */
+  const strokeRingArc = (from: number, to: number) => {
+    ctx.save();
+    ctx.globalAlpha = 0.55 * vitality;
+    ctx.strokeStyle = glowFrom(skin.accent, 0.9);
+    ctx.lineWidth = Math.max(0.9, radius * 0.11);
+    ctx.beginPath();
+    ctx.ellipse(
+      planetCenterX,
+      planetCenterY,
+      radius * 1.62,
+      radius * 1.62 * ORBIT_TILT,
+      0,
+      from,
+      to
+    );
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // Far side first: the planet will be painted over these.
+  if (hasRings(moonCount)) strokeRingArc(Math.PI, Math.PI * 2);
+  placements.filter((p) => !p.inFront).forEach(drawMoon);
 
   ctx.globalAlpha = vitality;
   if (spriteReady && sprite) {
@@ -181,6 +266,11 @@ export const drawNode = (
   }
   ctx.globalAlpha = 1;
   ctx.closePath();
+
+  // Near side last, so these cross in front of the body.
+  if (hasRings(moonCount)) strokeRingArc(0, Math.PI);
+  placements.filter((p) => p.inFront).forEach(drawMoon);
+
   ctx.restore();
 };
 

@@ -2,6 +2,8 @@ import React from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { Status, Task } from "../App";
 import Card from "./Card";
+import { useCelestialPrefs } from "../hooks/useCelestialPrefs";
+import { accentForStatus } from "../lib/celestialPrefs";
 
 type Props = {
   id: Status;           // "TO-DO" | "IN PROGRESS" | "DONE"
@@ -23,6 +25,7 @@ export default function Column({
   titleById,
 }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id });
+  const [prefs] = useCelestialPrefs();
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
@@ -32,8 +35,8 @@ export default function Column({
     }
   };
 
-  const accent =
-    id === "TO-DO" ? "#47a3f3" : id === "IN PROGRESS" ? "#f7b84b" : "#4ade80";
+  // The column wears whatever body it flies in the galaxy.
+  const accent = accentForStatus(prefs, id);
 
   return (
     <section

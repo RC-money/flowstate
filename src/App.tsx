@@ -60,6 +60,7 @@ import { useObserverEngine } from "./engine/observer/hooks";
 import { useCosmicEvents } from "./engine/events";
 import { useBiome } from "./engine/biomes";
 import Observatory from "./components/Observatory";
+import CelestialPanel from "./components/CelestialPanel";
 import { useCelestialStructures } from "./hooks/useCelestialStructures";
 import { BiomeProvider } from "./engine/biomes";
 
@@ -525,6 +526,45 @@ function AppShell() {
       preventDefault: true,
       stopPropagation: true,
     },
+    // Every palette entry answers to a key. The hook ignores keystrokes typed
+    // into inputs, so these stay out of the way of the palette's own search.
+    {
+      combo: "o",
+      handler: () => setObservatoryOpen(true),
+      enabled: !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    {
+      combo: "a",
+      handler: () => setAskOpen(true),
+      enabled: !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    {
+      combo: "x",
+      handler: () => handleExportTasks(),
+      enabled: !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    {
+      combo: "i",
+      handler: () => importInputRef.current?.click(),
+      enabled: !isModalOpen,
+      preventDefault: true,
+      stopPropagation: true,
+    },
+    {
+      combo: "r",
+      handler: () => {
+        darkForestTasks.forEach((task) => handleRestoreFromDarkForest(task.id));
+      },
+      enabled: !isModalOpen && darkForestTasks.length > 0,
+      preventDefault: true,
+      stopPropagation: true,
+    },
   ]);
 
   useEffect(() => {
@@ -563,6 +603,7 @@ function AppShell() {
       {
         id: "cmd-ask-flow",
         label: "Ask Flow (board commands)",
+        hint: "A",
         run: () => {
           logEvent({ type: "palette:run" });
           setAskOpen(true);
@@ -573,6 +614,7 @@ function AppShell() {
             {
               id: "cmd-dark-forest-restore",
               label: `Restore ${darkForestTasks.length} task${darkForestTasks.length === 1 ? "" : "s"} from the Dark Forest`,
+              hint: "R",
               run: () => {
                 logEvent({ type: "palette:run" });
                 darkForestTasks.forEach((task) => handleRestoreFromDarkForest(task.id));
@@ -583,6 +625,7 @@ function AppShell() {
       {
         id: "cmd-export",
         label: "Export tasks as JSON",
+        hint: "X",
         run: () => {
           logEvent({ type: "palette:run" });
           handleExportTasks();
@@ -591,6 +634,7 @@ function AppShell() {
       {
         id: "cmd-import",
         label: "Import tasks from JSON",
+        hint: "I",
         run: () => {
           logEvent({ type: "palette:run" });
           importInputRef.current?.click();
@@ -744,6 +788,7 @@ function AppShell() {
           onToggle={toggleOrbit}
           onToggleShuffle={toggleShuffle}
         />
+        <CelestialPanel />
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
             Your data
