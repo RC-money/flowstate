@@ -46,6 +46,16 @@ const SKIN_SPRITES: Record<SkinId, HTMLImageElement | null> = {
  */
 const ORBIT_TILT = 0.42;
 
+/**
+ * The view rotation, mirrored here so the canvas renderer can tip a planet's
+ * rings and moons into the same space the system is being viewed from. Set
+ * from GraphView; drawNode is not a component and cannot subscribe.
+ */
+let currentView: ViewRotation = IDENTITY_ROTATION;
+export const setGraphViewRotation = (rotation: ViewRotation): void => {
+  currentView = rotation;
+};
+
 /** Expands #rrggbb into an rgba() glow at the given alpha. */
 const glowFrom = (hex: string, alpha: number): string => {
   const full =
@@ -66,6 +76,7 @@ import {
   type SkinId,
   type StatusKey,
 } from "../../lib/celestialPrefs";
+import { rotatePoint, IDENTITY_ROTATION, type ViewRotation } from "../../lib/viewRotation";
 import {
   moonInclination,
   moonShells,
@@ -217,10 +228,16 @@ export const drawNode = (
     const rot = shellRotation(shell);
     const cosR = Math.cos(rot);
     const sinR = Math.sin(rot);
+    // Tip the ring into its own plane, then into the plane you are viewing the
+    // whole system from, so an atom leans with its galaxy.
+    const local = rotatePoint(
+      { x: lx * cosR - ly * sinR, y: lx * sinR + ly * cosR, z: 0 },
+      currentView
+    );
     return {
       entry,
-      sx: planetCenterX + lx * cosR - ly * sinR,
-      sy: planetCenterY + lx * sinR + ly * cosR,
+      sx: planetCenterX + local.x,
+      sy: planetCenterY + local.y,
       // Near moons read bigger; the parallax is what sells the tilt.
       moonR: Math.max(1.6, radius * 0.22 * (0.76 + 0.36 * nearness)),
       inFront: depth > 0,
@@ -264,16 +281,24 @@ export const drawNode = (
     ctx.globalAlpha = (0.5 - shell * 0.09) * vitality;
     ctx.strokeStyle = glowFrom(skin.accent, 0.9);
     ctx.lineWidth = Math.max(0.7, radius * 0.055);
+    const rot = shellRotation(shell);
+    const cosR = Math.cos(rot);
+    const sinR = Math.sin(rot);
+    const STEPS = 40;
     ctx.beginPath();
-    ctx.ellipse(
-      planetCenterX,
-      planetCenterY,
-      r,
-      r * ORBIT_TILT,
-      shellRotation(shell),
-      from,
-      to
-    );
+    for (let i = 0; i <= STEPS; i += 1) {
+      const a = from + ((to - from) * i) / STEPS;
+      const ex = Math.cos(a) * r;
+      const ey = Math.sin(a) * r * ORBIT_TILT;
+      const p = rotatePoint(
+        { x: ex * cosR - ey * sinR, y: ex * sinR + ey * cosR, z: 0 },
+        currentView
+      );
+      const px = planetCenterX + p.x;
+      const py = planetCenterY + p.y;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
     ctx.stroke();
     ctx.restore();
   };

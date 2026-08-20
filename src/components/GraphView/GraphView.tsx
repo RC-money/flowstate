@@ -21,6 +21,7 @@ import {
   getLinkWidth,
   getParticleColor,
   legendSwatches,
+  setGraphViewRotation,
   SUN_SPRITE,
 } from "./graphStyles";
 import Starfield from "./Starfield";
@@ -632,6 +633,8 @@ const GraphView: React.FC<GraphViewProps> = ({
   const rotationRef = useRef<ViewRotation>(IDENTITY_ROTATION);
   useEffect(() => {
     rotationRef.current = rotation;
+    // The canvas renderer is not a component, so hand it the rotation directly.
+    setGraphViewRotation(rotation);
   }, [rotation]);
   const setAxis = useCallback((axis: keyof ViewRotation, value: number) => {
     setRotation((prev) => ({ ...prev, [axis]: value }));
@@ -851,9 +854,24 @@ const GraphView: React.FC<GraphViewProps> = ({
       // Orbit lanes first, so the sun sits on top of them.
       ctx.strokeStyle = `rgba(255,214,140,${Math.min(0.5, 0.08 + laneWidth * 0.045)})`;
       ctx.lineWidth = laneWidth;
+      // The lanes are traced through the same rotation the planets ride, so a
+      // tilted system shows tilted orbits rather than planets moving on ellipses
+      // inside circles that never moved.
+      const view = rotationRef.current;
+      const STEPS = 96;
       (["TO-DO", "IN PROGRESS", "DONE"] as const).forEach((status) => {
+        const laneR = heliosRadius(status);
         ctx.beginPath();
-        ctx.arc(0, 0, heliosRadius(status), 0, Math.PI * 2);
+        for (let i = 0; i <= STEPS; i += 1) {
+          const a = (i / STEPS) * Math.PI * 2;
+          const p = rotatePoint(
+            { x: Math.cos(a) * laneR, y: Math.sin(a) * laneR, z: 0 },
+            view
+          );
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
         ctx.stroke();
       });
 
