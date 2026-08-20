@@ -31,6 +31,7 @@ import type { Constellation, Tether } from "../../types/celestial";
 import { analyzeConstellations } from "../../engine/constellations/analyzer";
 import { deriveStars } from "../../lib/earnedStars";
 import { heliosPosition, heliosRadius } from "../../lib/orbitalMechanics";
+import { latticeColumnIndex, latticePosition } from "../../lib/latticeLayout";
 import {
   flowRotationAt,
   IDENTITY_ROTATION,
@@ -593,6 +594,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   });
   const heliosActive = heliosMode;
   const [heliosFrozen, setHeliosFrozen] = useState(false);
+  const [keptAt, setKeptAt] = useState<number | null>(null);
   // Three axes of view control: spin turns the table, tilt lifts you above or
   // below the plane, yaw swings it around. Flow drifts between configurations
   // on its own. Applies with or without HELIOS.
@@ -686,6 +688,45 @@ const GraphView: React.FC<GraphViewProps> = ({
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [heliosActive, rotationActive, graphData.nodes]);
+
+  /**
+   * Stands the board up as columns of nodes and lets the links between them
+   * carry the structure. Positions are pinned, so the simulation stops
+   * shuffling them around once they are placed.
+   */
+  const arrangeLattice = useCallback(() => {
+    const counts = new Map<number, number>();
+    graphData.nodes.forEach((node) => {
+      const col = latticeColumnIndex(String((node as GraphNode).status ?? "TO-DO"));
+      counts.set(col, (counts.get(col) ?? 0) + 1);
+    });
+    const seen = new Map<number, number>();
+    graphData.nodes.forEach((node) => {
+      const n = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+      const col = latticeColumnIndex(String(n.status ?? "TO-DO"));
+      const index = seen.get(col) ?? 0;
+      seen.set(col, index + 1);
+      const { x, y } = latticePosition({ column: col, index, total: counts.get(col) ?? 1 });
+      n.x = x;
+      n.y = y;
+      n.fx = x;
+      n.fy = y;
+      saveLayoutEntry(String(n.id), x, y);
+    });
+  }, [graphData.nodes]);
+
+  /** Pins wherever the planets are right now and remembers it. */
+  const keepArrangement = useCallback(() => {
+    graphData.nodes.forEach((node) => {
+      const n = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+      const x = n.x ?? 0;
+      const y = n.y ?? 0;
+      n.fx = x;
+      n.fy = y;
+      saveLayoutEntry(String(n.id), x, y);
+    });
+    setKeptAt(Date.now());
+  }, [graphData.nodes]);
 
   /** Centres the sun and pulls back to hold the outermost lane. */
   const frameHelios = useCallback((transition = 700) => {
@@ -1783,13 +1824,33 @@ const GraphView: React.FC<GraphViewProps> = ({
                   // up as well as centring it.
                   setFlowOn(false);
                   setRotation(IDENTITY_ROTATION);
-                  if (heliosActive) frameHelios(600);
-                  else frameGraphToNodes(600, 60);
+                  if (heliosActive) {
+                    frameHelios(600);
+                  } else {
+                    arrangeLattice();
+                    // Let the pinned positions land before framing them.
+                    window.setTimeout(() => frameGraphToNodes(600, 70), 60);
+                  }
                 }}
                 className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10"
               >
                 Fit to galaxy
               </button>
+              {!heliosActive ? (
+                <button
+                  type="button"
+                  onClick={keepArrangement}
+                  title="Pin the planets where they are and remember it"
+                  className={[
+                    "flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition",
+                    keptAt
+                      ? "border-emerald-300/70 bg-emerald-400/15 text-emerald-100"
+                      : "border-white/15 text-slate-300 hover:bg-white/10",
+                  ].join(" ")}
+                >
+                  {keptAt ? "Kept" : "Keep"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 aria-pressed={heliosActive}
