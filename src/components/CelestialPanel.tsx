@@ -100,14 +100,17 @@ const CelestialPanel = () => {
             type="button"
             aria-pressed={prefs.moonGlow}
             onClick={() => setPrefs({ ...prefs, moonGlow: !prefs.moonGlow })}
+            title={prefs.moonGlow ? "Glow is on" : "Glow is off"}
             className={[
               "shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition",
+              // The state is the colour, not a word: gold when it burns,
+              // nothing when it doesn't.
               prefs.moonGlow
                 ? "border-amber-300/70 bg-amber-400/15 text-amber-100"
                 : "border-white/15 text-slate-400 hover:bg-white/10",
             ].join(" ")}
           >
-            {prefs.moonGlow ? "Glow on" : "Glow off"}
+            Glow
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
