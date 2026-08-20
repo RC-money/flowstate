@@ -72,6 +72,21 @@ const linkSignature = (link: GraphLink): string =>
 export const tasksToGraph = (tasks: Task[]): GraphData => {
   const safeTasks = Array.isArray(tasks) ? (tasks as TaskLike[]) : [];
 
+  // Blocked means waiting on work that is not finished yet -- read from
+  // dependsOn rather than a flag, because nothing ever set a flag. Finished is
+  // completedAt, not a column name, so this survives a board renaming its own
+  // columns. A dependency that no longer exists blocks nothing: the thing it
+  // was waiting for is gone.
+  const finished = new Set(
+    safeTasks
+      .filter((entry) => (entry as Task).completedAt !== undefined)
+      .map((entry) => parseId(entry.id))
+      .filter((id): id is string => id !== null)
+  );
+  const known = new Set(
+    safeTasks.map((entry) => parseId(entry.id)).filter((id): id is string => id !== null)
+  );
+
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
   const seenNodeIds = new Set<string>();
@@ -84,15 +99,12 @@ export const tasksToGraph = (tasks: Task[]): GraphData => {
     if (!id || seenNodeIds.has(id)) return;
 
     const status = (task.status ?? "TO-DO") as ColumnID;
-    const blockedValue =
-      typeof task.blocked === "boolean"
-        ? task.blocked
-        : typeof (task as TaskLike).blocked === "boolean"
-        ? (task as TaskLike).blocked
-        : undefined;
-    const blocked = blockedValue === undefined ? undefined : Boolean(blockedValue);
     const tags = normalizeTags((task as TaskLike).tags);
     const dependsOn = normalizeDependsOn((task as TaskLike).dependsOn, id);
+    // A task that is itself finished is not waiting on anything any more.
+    const blocked =
+      (task as Task).completedAt === undefined &&
+      dependsOn.some((needed) => known.has(needed) && !finished.has(needed));
 
     // Completed work does not decay -- the sky already holds it.
     const decay =

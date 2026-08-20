@@ -52,6 +52,44 @@ type EnhancedStarfieldProps = BaseStarfieldProps & {
 };
 const EnhancedStarfield = Starfield as React.ComponentType<EnhancedStarfieldProps>;
 
+/** One switch in the Show panel: what is drawn over the galaxy, or not. */
+const SkyToggle: React.FC<{
+  label: string;
+  hint: string;
+  on: boolean;
+  onToggle: () => void;
+}> = ({ label, hint, on, onToggle }) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    aria-pressed={on}
+    className="rounded-xl px-2 py-1.5 text-left transition hover:bg-white/[0.04]"
+  >
+    <span className="flex items-center justify-between gap-3">
+      <span
+        className={`text-[10px] font-semibold uppercase tracking-wide ${
+          on ? "text-white" : "text-slate-400"
+        }`}
+      >
+        {label}
+      </span>
+      <span
+        aria-hidden="true"
+        className={`flex h-3.5 w-7 shrink-0 items-center rounded-full border transition ${
+          on ? "border-[#a5afff] bg-[#7c83ff]/50" : "border-white/20 bg-white/5"
+        }`}
+      >
+        <span
+          className={`block h-2.5 w-2.5 rounded-full bg-white transition-transform ${
+            on ? "translate-x-[15px]" : "translate-x-[2px]"
+          }`}
+        />
+      </span>
+    </span>
+    <span className="mt-0.5 block text-[10px] text-slate-500">{hint}</span>
+  </button>
+);
+
 type ClusterMode = "none" | "column" | "tag";
 type GraphPreset = "planning" | "focus";
 type LegendKey = (typeof legendSwatches)[number]["label"];
@@ -386,8 +424,6 @@ const GraphView: React.FC<GraphViewProps> = ({
   const nodePositionsRef = useRef<NodePosition[]>([]);
   const [starfieldEvent, setStarfieldEvent] = useState<StarfieldEventType | null>(null);
   const starfieldEventResetRef = useRef<number | null>(null);
-  const filtersDirty = activeLegendKeys.size !== LEGEND_KEYS.length;
-  const legendStatusMessage = `Showing: ${activeLegendKeys.size} of ${LEGEND_KEYS.length}`;
   const isLegendKeyActive = useCallback(
     (key: LegendKey | null | undefined) => {
       if (!key) return true;
@@ -395,6 +431,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     },
     [activeLegendKeys]
   );
+
   const toggleLegendKey = useCallback((key: LegendKey) => {
     setActiveLegendKeys((prev) => {
       const next = new Set(prev);
@@ -405,9 +442,6 @@ const GraphView: React.FC<GraphViewProps> = ({
       }
       return next;
     });
-  }, []);
-  const resetLegendFilters = useCallback(() => {
-    setActiveLegendKeys(new Set(LEGEND_KEYS));
   }, []);
   const isNodeVisible = useCallback(
     (node: GraphNode | null | undefined) => {
@@ -2015,121 +2049,46 @@ const GraphView: React.FC<GraphViewProps> = ({
           </div>
 
           <div className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-[11px] text-slate-200 shadow-inner shadow-black/30">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Legend
-                </div>
-                <p className="text-[10px] text-slate-500" aria-hidden="true">
-                  {legendStatusMessage}
-                </p>
-              </div>
-              {filtersDirty ? (
-                <button
-                  type="button"
-                  onClick={resetLegendFilters}
-                  className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70"
-                >
-                  Reset filters
-                </button>
-              ) : null}
+            <div className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Show
             </div>
-            <div className="flex flex-wrap gap-2">
-              {legendSwatches.map((swatch) => {
-                const legendKey = swatch.label as LegendKey;
-                const isActive = activeLegendKeys.has(legendKey);
-                return (
-                  <button
-                    key={swatch.label}
-                    type="button"
-                    role="switch"
-                    aria-checked={isActive}
-                    onClick={() => toggleLegendKey(legendKey)}
-                    className={[
-                      "flex items-center gap-2 rounded-xl border px-2 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/70",
-                      isActive
-                        ? "border-white/40 bg-white/10 text-white"
-                        : "border-white/10 text-slate-400 hover:border-white/30 hover:text-white",
-                    ].join(" ")}
-                  >
-                    {swatch.kind === "node" ? (
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full"
-                        style={{
-                          backgroundColor: swatch.color,
-                          opacity: isActive ? 1 : 0.3,
-                        }}
-                      />
-                    ) : (
-                      <span
-                        className="inline-block h-[2px] w-6"
-                        style={{
-                          background: isActive
-                            ? swatch.color
-                            : "rgba(148, 163, 184, 0.3)",
-                          borderBottom: swatch.dashed
-                            ? isActive
-                              ? "1px dashed rgba(226,232,240,0.6)"
-                              : "1px dashed rgba(148,163,184,0.4)"
-                            : "none",
-                        }}
-                      />
-                    )}
-                    <span>{swatch.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {/* The legend already says what is drawn and what is hidden, so
-                the rest of the universe belongs here rather than as a button
-                floating over the sky. */}
-            {onToggleUniverse ? (
-              <div className="mt-3 border-t border-white/10 pt-3">
-                <button
-                  type="button"
-                  onClick={onToggleUniverse}
-                  aria-pressed={showUniverse}
-                  className="flex w-full items-center justify-between gap-3 text-left text-[10px] font-semibold uppercase tracking-wide transition"
-                >
-                  <span className={showUniverse ? "text-white" : "text-slate-400"}>
-                    Allow universe
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className={`h-3 w-6 rounded-full border transition ${
-                      showUniverse
-                        ? "border-[#a5afff] bg-[#7c83ff]/50"
-                        : "border-white/20 bg-white/5"
-                    }`}
-                  >
-                    <span
-                      className={`block h-[10px] w-[10px] rounded-full bg-white transition-transform ${
-                        showUniverse ? "translate-x-[13px]" : "translate-x-[1px]"
-                      }`}
-                    />
-                  </span>
-                </button>
-                <p className="mt-1 text-[10px] text-slate-500">
-                  Your other clusters, out around this one.
-                </p>
 
-                {/* Offered only once every task here is finished. Ending the
-                    project from inside it, where you already are when you
-                    finish the last thing. */}
-                {etherLabel && onEtherCluster ? (
-                  <button
-                    type="button"
-                    onClick={onEtherCluster}
-                    className="mt-3 w-full rounded-xl border border-[#c9d0ff]/30 bg-gradient-to-r from-[#5b5cf0]/15 to-[#a5afff]/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#c9d0ff] transition hover:border-[#c9d0ff]/70 hover:text-white"
-                  >
-                    &#10024; Send {etherLabel} to the ether
-                  </button>
-                ) : null}
-              </div>
+            {/* Two switches, not a key. The colours already say which column a
+                planet belongs to; what needed saying was what else is drawn. */}
+            <div className="flex flex-col gap-1">
+              {onToggleUniverse ? (
+                <SkyToggle
+                  label="Allow universe"
+                  hint="Your other clusters, out around this one."
+                  on={Boolean(showUniverse)}
+                  onToggle={onToggleUniverse}
+                />
+              ) : null}
+              <SkyToggle
+                label="Shared tag"
+                hint="Lines between tasks that carry the same tag."
+                on={activeLegendKeys.has("Shared tag")}
+                onToggle={() => toggleLegendKey("Shared tag")}
+              />
+            </div>
+
+            {/* Offered only once every task here is finished. Ending the
+                project from inside it, where you already are when you finish
+                the last thing. */}
+            {etherLabel && onEtherCluster ? (
+              <button
+                type="button"
+                onClick={onEtherCluster}
+                className="mt-3 w-full rounded-xl border border-[#c9d0ff]/30 bg-gradient-to-r from-[#5b5cf0]/15 to-[#a5afff]/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#c9d0ff] transition hover:border-[#c9d0ff]/70 hover:text-white"
+              >
+                &#10024; Send {etherLabel} to the ether
+              </button>
             ) : null}
 
             <div className="sr-only" aria-live="polite">
-              {legendStatusMessage}
+              {`Universe ${showUniverse ? "shown" : "hidden"}, shared tags ${
+                activeLegendKeys.has("Shared tag") ? "shown" : "hidden"
+              }`}
             </div>
           </div>
         </div>
