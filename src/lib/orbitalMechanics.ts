@@ -36,8 +36,8 @@ const HELIOS_MAX_PERIOD_MS = 150_000;
 export const RING_THRESHOLD = 5;
 
 /** Growth per subtask, and the ceiling on that growth. */
-const SCALE_PER_SUBTASK = 0.055;
-const MAX_SCALE = 1.6;
+const SCALE_PER_SUBTASK = 0.11;
+const MAX_SCALE = 2.3;
 const MAX_COUNTED_SUBTASKS = 10;
 
 /** Counts arrive from user data, so treat junk as the quietest case. */
@@ -126,3 +126,34 @@ export const planetScale = (count: number): number => {
 /** Whether a planet is heavy enough to have collected a ring system. */
 export const hasRings = (count: number): boolean =>
   Number.isFinite(count) && count >= RING_THRESHOLD;
+
+/**
+ * A stable starting angle for a task, hashed from its id. Nothing is stored --
+ * the same task always sets out from the same point on its ring, the way
+ * earned-star positions derive from the id rather than a saved coordinate.
+ */
+export const heliosPhase = (id: string): number => {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 3600) / 3600 * Math.PI * 2;
+};
+
+/**
+ * Where a planet sits around the sun at a moment in time. New work hugs the
+ * sun, finished work rides the outer dark, and mass slows the lap.
+ */
+export const heliosPosition = (
+  id: string,
+  status: string,
+  now: number,
+  subtaskCount: number
+): { x: number; y: number } => {
+  const radius = heliosRadius(status);
+  const elapsed = Number.isFinite(now) ? now : 0;
+  const rotation = (elapsed / heliosOrbitPeriodMs(subtaskCount)) * Math.PI * 2;
+  const angle = heliosPhase(id) + rotation;
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+};

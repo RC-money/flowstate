@@ -110,7 +110,7 @@ const getCoreRadius = (node: GraphNode, globalScale: number): number => {
   const base = nodeSize(node.deps);
   const scale = Math.max(0.6, 1 / Math.sqrt(globalScale || 1));
   const raw = base * scale;
-  return Math.max(6, Math.min(14, raw));
+  return Math.max(6, Math.min(18, raw));
 };
 
 type RenderableGraphNode = GraphNode & { x?: number; y?: number };
@@ -177,7 +177,7 @@ export const drawNode = (
   // The orbit is a tilted plane rather than a flat ring, so a moon passes
   // behind the planet on the far side and in front of it on the near side.
   // sin(angle) is the depth: +1 is nearest the viewer, -1 is furthest.
-  const orbitR = radius * 1.9;
+  const orbitR = radius * 1.72;
   const placements = (moons ?? []).map((entry, i) => {
     // One loose end whips around; a crowded task turns slowly. A subtask
     // carrying more detail is heavier still, and drags its own orbit out.
@@ -192,7 +192,7 @@ export const drawNode = (
       sx: planetCenterX + Math.cos(angle) * orbitR,
       sy: planetCenterY + depth * orbitR * tilt,
       // Near moons read bigger; the parallax is what sells the tilt.
-      moonR: Math.max(1.8, radius * 0.3 * (0.76 + 0.36 * nearness)),
+      moonR: Math.max(1.8, radius * 0.25 * (0.76 + 0.36 * nearness)),
       inFront: depth > 0,
     };
   });
@@ -236,8 +236,8 @@ export const drawNode = (
     ctx.ellipse(
       planetCenterX,
       planetCenterY,
-      radius * 1.62,
-      radius * 1.62 * ORBIT_TILT,
+      radius * 1.48,
+      radius * 1.48 * ORBIT_TILT,
       0,
       from,
       to

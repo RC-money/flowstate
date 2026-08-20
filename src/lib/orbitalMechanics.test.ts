@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   hasRings,
   heliosOrbitPeriodMs,
+  heliosPhase,
+  heliosPosition,
   heliosRadius,
   moonOrbitAngle,
   orbitPeriodMs,
@@ -78,7 +80,7 @@ describe("planetScale", () => {
 
   it("stops growing past the cap so one task cannot swallow the galaxy", () => {
     expect(planetScale(50)).toBe(planetScale(500));
-    expect(planetScale(500)).toBeLessThanOrEqual(1.6);
+    expect(planetScale(500)).toBeLessThanOrEqual(2.3);
   });
 });
 
@@ -142,5 +144,49 @@ describe("helios", () => {
 
   it("caps the period so a huge task still moves", () => {
     expect(heliosOrbitPeriodMs(200)).toBe(heliosOrbitPeriodMs(999));
+  });
+});
+
+describe("heliosPhase", () => {
+  it("is stable for the same id", () => {
+    expect(heliosPhase("task-42")).toBe(heliosPhase("task-42"));
+  });
+
+  it("spreads different ids around the circle", () => {
+    const phases = ["a", "b", "c", "d", "e", "f"].map(heliosPhase);
+    expect(new Set(phases).size).toBe(phases.length);
+    for (const p of phases) {
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThan(Math.PI * 2);
+    }
+  });
+
+  it("handles an empty id without producing NaN", () => {
+    expect(Number.isFinite(heliosPhase(""))).toBe(true);
+  });
+});
+
+describe("heliosPosition", () => {
+  it("puts a task on its status ring", () => {
+    const { x, y } = heliosPosition("t1", "IN PROGRESS", 0, 0);
+    expect(Math.hypot(x, y)).toBeCloseTo(heliosRadius("IN PROGRESS"), 5);
+  });
+
+  it("comes back to the same point after one lap", () => {
+    const period = heliosOrbitPeriodMs(2);
+    const a = heliosPosition("t1", "TO-DO", 0, 2);
+    const b = heliosPosition("t1", "TO-DO", period, 2);
+    expect(b.x).toBeCloseTo(a.x, 4);
+    expect(b.y).toBeCloseTo(a.y, 4);
+  });
+
+  it("moves a light task further around than a heavy one in the same time", () => {
+    const light = heliosPosition("t1", "TO-DO", 5000, 0);
+    const heavy = heliosPosition("t1", "TO-DO", 5000, 9);
+    const start = heliosPosition("t1", "TO-DO", 0, 0);
+    const angleOf = (p: { x: number; y: number }) => Math.atan2(p.y, p.x);
+    const travelled = (p: { x: number; y: number }) =>
+      Math.abs(angleOf(p) - angleOf(start));
+    expect(travelled(light)).toBeGreaterThan(travelled(heavy));
   });
 });

@@ -29,6 +29,7 @@ import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
 import type { Constellation, Tether } from "../../types/celestial";
 import { analyzeConstellations } from "../../engine/constellations/analyzer";
 import { deriveStars } from "../../lib/earnedStars";
+import { heliosPosition, heliosRadius } from "../../lib/orbitalMechanics";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
@@ -218,6 +219,7 @@ const linkKey = (link: GraphLink | LinkObject): string => {
 
 const PREFS_STORAGE_KEY = "flowstate:graph-prefs";
 const LAYOUT_STORAGE_KEY = "flowstate:v1:galaxy-layout";
+const HELIOS_STORAGE_KEY = "flowstate:v1:helios";
 
 type SavedLayout = Record<string, { x: number; y: number }>;
 
@@ -573,6 +575,111 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     return () => window.clearInterval(timer);
   }, [graphPrefs.idleDrift]);
+
+  // HELIOS pins every planet onto a ring around a sun instead of letting the
+  // force simulation decide. New work hugs the sun, finished work rides the
+  // outer dark, and a task heavy with subtasks laps more slowly.
+  const [heliosMode, setHeliosMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(HELIOS_STORAGE_KEY) === "1";
+  });
+  const heliosActive = heliosMode;
+  const toggleHelios = useCallback(() => {
+    setHeliosMode((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(HELIOS_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // Not worth breaking the view over.
+      }
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (!heliosActive) return undefined;
+    // Put the sun in the middle of the frame and pull back far enough to hold
+    // the outermost lane; otherwise you arrive somewhere off in the dark. The
+    // delay lets the graph instance and the pinned positions exist first.
+    const frameTimer = window.setTimeout(() => {
+      const fg = fgRef.current;
+      if (!fg) return;
+      fg.centerAt?.(0, 0, 700);
+      const el = graphViewportRef.current;
+      const fit =
+        Math.min(el?.clientWidth ?? 900, el?.clientHeight ?? 520) /
+        (heliosRadius("DONE") * 2.4);
+      fg.zoom?.(Math.max(0.2, Math.min(1.2, fit)), 700);
+    }, 450);
+    let raf = 0;
+    const step = () => {
+      const now = performance.now();
+      graphData.nodes.forEach((node) => {
+        const n = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+        const { x, y } = heliosPosition(
+          String(n.id),
+          String(n.status ?? "TO-DO"),
+          now,
+          n.subtaskMoons?.length ?? 0
+        );
+        n.x = x;
+        n.y = y;
+        n.fx = x;
+        n.fy = y;
+      });
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => {
+      window.clearTimeout(frameTimer);
+      cancelAnimationFrame(raf);
+      // Hand the planets back to the simulation on the way out.
+      graphData.nodes.forEach((node) => {
+        const n = node as GraphNode & { fx?: number; fy?: number };
+        delete n.fx;
+        delete n.fy;
+      });
+    };
+  }, [heliosActive, graphData.nodes]);
+
+  /** Paints the sun and its lanes beneath the planets, in graph coordinates. */
+  const drawHelios = useCallback(
+    (ctx: CanvasRenderingContext2D) => {
+      if (!heliosActive) return;
+      const t = performance.now();
+      const breath = 1 + Math.sin(t / 1400) * 0.04;
+      const r = 34 * breath;
+
+      ctx.save();
+      // Orbit lanes first, so the sun sits on top of them.
+      ctx.strokeStyle = "rgba(255,214,140,0.10)";
+      ctx.lineWidth = 1;
+      (["TO-DO", "IN PROGRESS", "DONE"] as const).forEach((status) => {
+        ctx.beginPath();
+        ctx.arc(0, 0, heliosRadius(status), 0, Math.PI * 2);
+        ctx.stroke();
+      });
+
+      const corona = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 4.2);
+      corona.addColorStop(0, "rgba(255,206,92,0.42)");
+      corona.addColorStop(0.4, "rgba(255,141,46,0.16)");
+      corona.addColorStop(1, "rgba(255,120,40,0)");
+      ctx.fillStyle = corona;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 4.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      const body = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);
+      body.addColorStop(0, "#fffdf3");
+      body.addColorStop(0.45, "#ffd35c");
+      body.addColorStop(1, "#f97316");
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    },
+    [heliosActive]
+  );
 
   const resetLayout = useCallback(() => {
     clearHover();
@@ -1363,6 +1470,7 @@ const GraphView: React.FC<GraphViewProps> = ({
               // painting after the simulation settles -- the default pauses
               // redraw once nothing moves, which froze them mid-orbit.
               autoPauseRedraw={false}
+              onRenderFramePre={(ctx: CanvasRenderingContext2D) => drawHelios(ctx)}
               enableZoomInteraction={scrollZoomEnabled}
               linkDirectionalParticles={1}
               linkDirectionalParticleWidth={(link) => {
@@ -1514,6 +1622,20 @@ const GraphView: React.FC<GraphViewProps> = ({
                 className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10"
               >
                 Fit to galaxy
+              </button>
+              <button
+                type="button"
+                aria-pressed={heliosActive}
+                onClick={toggleHelios}
+                title="A sun at the centre. New work orbits close, finished work rides the outer dark."
+                className={[
+                  "flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition",
+                  heliosActive
+                    ? "border-amber-300/70 bg-amber-400/15 text-amber-100"
+                    : "border-white/15 text-slate-300 hover:bg-white/10",
+                ].join(" ")}
+              >
+                Helios
               </button>
               <button
                 type="button"
