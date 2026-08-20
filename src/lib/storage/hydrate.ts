@@ -1,14 +1,14 @@
-import { coerceTasks, type Task } from "../../hooks/useLocalTasks";
+import { normalizeBoard, type Board } from "../clusters/board";
 
 export interface Hydration {
-  tasks: Task[] | null;
+  board: Board | null;
   source: "file" | "legacy" | "none";
 }
 
-const parseBoard = (raw: string | null): Task[] | null => {
+const parseBoard = (raw: string | null, now: number): Board | null => {
   if (raw === null) return null;
   try {
-    return coerceTasks(JSON.parse(raw));
+    return normalizeBoard(JSON.parse(raw), now);
   } catch {
     return null;
   }
@@ -18,21 +18,24 @@ const parseBoard = (raw: string | null): Task[] | null => {
  * Decides which board a launch starts from. Pure -- all IO stays in the
  * adapters.
  *
- * The file always wins over legacy localStorage, including when it's an empty
- * array: "[]" means the user deleted their tasks, and resurrecting the legacy
- * board would silently undo that. Legacy is only adopted when the file is
- * missing or unreadable -- the one-time migration path, and the safety net if
- * the file ever corrupts.
+ * The file always wins over legacy localStorage, including when it holds no
+ * tasks: an empty board means the user deleted their tasks, and resurrecting
+ * the legacy board would silently undo that. Legacy is only adopted when the
+ * file is missing or unreadable -- the one-time migration path, and the safety
+ * net if the file ever corrupts.
+ *
+ * Either side may be in the pre-clusters shape; `normalizeBoard` wraps it.
  */
 export const decideHydration = (
   fileRaw: string | null,
-  legacyRaw: string | null
+  legacyRaw: string | null,
+  now: number
 ): Hydration => {
-  const fromFile = parseBoard(fileRaw);
-  if (fromFile) return { tasks: fromFile, source: "file" };
+  const fromFile = parseBoard(fileRaw, now);
+  if (fromFile) return { board: fromFile, source: "file" };
 
-  const fromLegacy = parseBoard(legacyRaw);
-  if (fromLegacy) return { tasks: fromLegacy, source: "legacy" };
+  const fromLegacy = parseBoard(legacyRaw, now);
+  if (fromLegacy) return { board: fromLegacy, source: "legacy" };
 
-  return { tasks: null, source: "none" };
+  return { board: null, source: "none" };
 };

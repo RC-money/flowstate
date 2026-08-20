@@ -1,4 +1,5 @@
 import type { Task } from "../../hooks/useLocalTasks";
+import type { Board } from "../clusters/board";
 import { decideHydration, type Hydration } from "./hydrate";
 import { shouldAdoptExternalChange } from "./external";
 
@@ -20,7 +21,7 @@ export interface TaskStore {
    * while the app is open. Returns an unsubscribe. Absent where nothing else
    * can touch the data (the browser owns its own localStorage).
    */
-  watch?(onExternal: (tasks: Task[]) => void): Promise<() => void>;
+  watch?(onExternal: (board: Board) => void): Promise<() => void>;
 }
 
 const LEGACY_KEY = "flowstate:v1:tasks";
@@ -62,8 +63,8 @@ const tauriFileStore = (): TaskStore => {
           try {
             if (!(await exists(FILE_NAME, { baseDir: BaseDirectory.AppData }))) return;
             const raw = await readTextFile(FILE_NAME, { baseDir: BaseDirectory.AppData });
-            const change = shouldAdoptExternalChange(raw, lastWritten);
-            if (change.adopt && change.tasks) onExternal(change.tasks);
+            const change = shouldAdoptExternalChange(raw, lastWritten, Date.now());
+            if (change.adopt && change.board) onExternal(change.board);
           } catch (error) {
             console.error("[flowstate] Watch read failed:", error);
           }
@@ -86,14 +87,17 @@ export const createTaskStore = (): TaskStore =>
  * the one-time migration into the Tauri file. When legacy data is adopted it
  * is written to the file immediately, so the next launch reads "file".
  */
-export const hydrateFromStore = async (store: TaskStore): Promise<Hydration> => {
+export const hydrateFromStore = async (
+  store: TaskStore,
+  now: number
+): Promise<Hydration> => {
   const fileRaw = await store.load().catch(() => null);
   const legacyRaw =
     typeof window !== "undefined" ? window.localStorage.getItem(LEGACY_KEY) : null;
-  const hydration = decideHydration(fileRaw, legacyRaw);
+  const hydration = decideHydration(fileRaw, legacyRaw, now);
   if (hydration.source === "file" && fileRaw !== null) lastWritten = fileRaw;
-  if (hydration.source === "legacy" && hydration.tasks) {
-    await store.save(JSON.stringify(hydration.tasks)).catch((error) => {
+  if (hydration.source === "legacy" && hydration.board) {
+    await store.save(JSON.stringify(hydration.board)).catch((error) => {
       console.error("[flowstate] Legacy migration write failed:", error);
     });
   }

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createTaskStore, hydrateFromStore } from "../lib/storage";
+import { DEFAULT_CLUSTER_ID } from "../lib/clusters/board";
+import { DEFAULT_CLUSTER_NAME, makeCluster, type Cluster } from "../lib/clusters/clusters";
 import { normalizeDates } from "../lib/taskDates";
 import { normalizeSubtasks, type Subtask } from "../lib/subtasks";
 
@@ -83,8 +85,17 @@ export interface HydrationInfo {
 
 export const useLocalTasks = (
   initial: Tasks
-): [Tasks, React.Dispatch<React.SetStateAction<Tasks>>, HydrationInfo] => {
+): [
+  Tasks,
+  React.Dispatch<React.SetStateAction<Tasks>>,
+  HydrationInfo,
+  Cluster[],
+  React.Dispatch<React.SetStateAction<Cluster[]>>
+] => {
   const [tasks, setTasks] = useState<Tasks>(initial);
+  const [clusters, setClusters] = useState<Cluster[]>(() => [
+    makeCluster(DEFAULT_CLUSTER_NAME, Date.now(), DEFAULT_CLUSTER_ID),
+  ]);
   const [hydration, setHydration] = useState<HydrationInfo>({
     ready: false,
     storedBoard: null,
@@ -96,13 +107,14 @@ export const useLocalTasks = (
   useEffect(() => {
     if (typeof window === "undefined" || hydratedRef.current) return;
     hydratedRef.current = true;
-    hydrateFromStore(storeRef.current)
-      .then(({ tasks: next, source }) => {
-        if (next) {
-          setTasks(next);
-          console.log(`[flowstate] Tasks hydrated from ${source}`);
+    hydrateFromStore(storeRef.current, Date.now())
+      .then(({ board, source }) => {
+        if (board) {
+          setTasks(board.tasks);
+          setClusters(board.clusters);
+          console.log(`[flowstate] Board hydrated from ${source}`);
         }
-        setHydration({ ready: true, storedBoard: next });
+        setHydration({ ready: true, storedBoard: board?.tasks ?? null });
       })
       .catch((error) => {
         console.error("[flowstate] Hydration failed:", error);
@@ -120,7 +132,8 @@ export const useLocalTasks = (
     let cancelled = false;
     store
       .watch((next) => {
-        setTasks(next);
+        setTasks(next.tasks);
+        setClusters(next.clusters);
         window.dispatchEvent(
           new CustomEvent("flowstate:toast", {
             detail: { message: "Board updated from outside.", variant: "success" },
@@ -144,8 +157,8 @@ export const useLocalTasks = (
     if (!hydratedRef.current || typeof window === "undefined") return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      storeRef.current.save(JSON.stringify(tasks)).catch((error) => {
-        console.error("[flowstate] Failed to save tasks:", error);
+      storeRef.current.save(JSON.stringify({ clusters, tasks })).catch((error) => {
+        console.error("[flowstate] Failed to save board:", error);
       });
     }, 150);
     return () => {
@@ -153,9 +166,9 @@ export const useLocalTasks = (
         clearTimeout(saveTimer.current);
       }
     };
-  }, [tasks]);
+  }, [tasks, clusters]);
 
-  return [tasks, setTasks, hydration];
+  return [tasks, setTasks, hydration, clusters, setClusters];
 };
 
 export const exportTasks = (tasks: Tasks): string => {
