@@ -26,6 +26,14 @@ import NoiseOverlay from "./components/NoiseOverlay";
 import AmbientStars from "./components/AmbientStars";
 import StatusBar from "./components/StatusBar";
 import { useHotkeys } from "./hooks/useHotkeys";
+import { useAmbientAudio } from "./hooks/useAmbientAudio";
+import orbit1Url from "./assets/orbit1.mp3";
+import orbit2Url from "./assets/orbit2.mp3";
+
+const MUSIC_TRACKS: MusicTrack[] = [
+  { id: "orbit-1", label: "Orbit I", src: orbit1Url },
+  { id: "orbit-2", label: "Orbit II", src: orbit2Url },
+];
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import AskFlowPanel from "./components/AskFlowPanel";
 import Welcome from "./components/Welcome";
@@ -36,6 +44,7 @@ import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/us
 import { stampCompletion } from "./lib/earnedStars";
 import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
+import MusicPanel, { type MusicTrack } from "./components/MusicPanel";
 import { useObserverEngine } from "./engine/observer/hooks";
 import { useCosmicEvents } from "./engine/events";
 import { useBiome } from "./engine/biomes";
@@ -515,6 +524,8 @@ function AppShell() {
     };
   }, []);
 
+  const { playingSrc, toggle: toggleOrbit } = useAmbientAudio();
+
   const commands: Command[] = useMemo(
     () => [
       {
@@ -712,6 +723,7 @@ function AppShell() {
 
       <Observatory open={observatoryOpen} onClose={() => setObservatoryOpen(false)}>
         <IntentSurface />
+        <MusicPanel tracks={MUSIC_TRACKS} playingSrc={playingSrc} onToggle={toggleOrbit} />
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
             Your data
