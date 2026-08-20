@@ -3,7 +3,7 @@ import { catalogNameFor, neighbourPose, ringSlot } from "../lib/clusters/androme
 import { isLive, type Cluster } from "../lib/clusters/clusters";
 import { columnPalette } from "../lib/columns/palette";
 import { useCelestialPrefs } from "../hooks/useCelestialPrefs";
-import { accentForStatus } from "../lib/celestialPrefs";
+import { accentForStatus, sunById } from "../lib/celestialPrefs";
 import type { Task } from "../hooks/useLocalTasks";
 
 interface UniverseOverlayProps {
@@ -51,6 +51,8 @@ export default function UniverseOverlay({
   const columnColor = (columnId: string, index: number): string =>
     prefs.statusSkins[columnId] ? accentForStatus(prefs, columnId) : columnPalette(index).core;
 
+  const sunGlow = sunById(prefs.sun).glow;
+
   const neighbours = useMemo(() => {
     const others = clusters.filter((cluster) => cluster.id !== activeClusterId);
     const live = others.filter(isLive);
@@ -80,12 +82,14 @@ export default function UniverseOverlay({
       aria-label="The rest of the universe"
     >
       <defs>
-        {/* The same warm star the galaxy view puts at the centre of HELIOS. */}
+        {/* Whatever star you chose, not a warm one by default. A neighbour
+            burning orange while the sun you are standing next to burns white
+            is the same tell as the planets being the wrong colour. */}
         <radialGradient id="universe-neighbour">
-          <stop offset="0%" stopColor="#fffdf3" stopOpacity="1" />
-          <stop offset="35%" stopColor="#ffd35c" stopOpacity="0.9" />
-          <stop offset="70%" stopColor="#f97316" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="34%" stopColor={sunGlow} stopOpacity="0.92" />
+          <stop offset="72%" stopColor={sunGlow} stopOpacity="0.45" />
+          <stop offset="100%" stopColor={sunGlow} stopOpacity="0" />
         </radialGradient>
         <filter id="universe-soft" x="-60%" y="-60%" width="220%" height="220%">
           <feGaussianBlur stdDeviation="0.006" />
