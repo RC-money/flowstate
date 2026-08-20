@@ -46,7 +46,7 @@ const MUSIC_TRACKS: MusicTrack[] = [
   },
 ];
 import CommandPalette, { type Command } from "./components/CommandPalette";
-import AskFlowPanel from "./components/AskFlowPanel";
+import ConnectPanel from "./components/ConnectPanel";
 import Welcome from "./components/Welcome";
 import { shouldShowWelcome } from "./lib/storage/firstRun";
 import { ToastProvider, useToast } from "./components/Toast";
@@ -187,7 +187,7 @@ function AppShell() {
   });
   const [showGraph, setShowGraph] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [askOpen, setAskOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
   const [observatoryOpen, setObservatoryOpen] = useState(false);
   const [andromedaOpen, setAndromedaOpen] = useState(false);
   const [andromedaNaming, setAndromedaNaming] = useState(false);
@@ -817,7 +817,7 @@ function AppShell() {
     },
     {
       combo: "a",
-      handler: () => setAskOpen(true),
+      handler: () => setConnectOpen(true),
       enabled: !isModalOpen,
       preventDefault: true,
       stopPropagation: true,
@@ -933,15 +933,15 @@ function AppShell() {
       // from outside a mouse, and because it is the same parse-resolve-run path
       // an MCP assistant will use.
       {
-        id: "cmd-ask-flow",
-        label: "Ask Flow",
+        id: "cmd-connect",
+        label: "Connect your AI",
         description:
-          "Tell the board what to do in plain English -- \"move the auth thing to done\". Runs offline, no model involved.",
+          "Let Claude, Codex or any MCP client run your board -- on this machine, no server, no account.",
         section: "Data & assistants",
         hint: "A",
         run: () => {
           logEvent({ type: "palette:run" });
-          setAskOpen(true);
+          setConnectOpen(true);
         },
       },
       {
@@ -1226,15 +1226,7 @@ function AppShell() {
         />
       ) : null}
 
-      <AskFlowPanel
-        open={askOpen}
-        onClose={() => setAskOpen(false)}
-        tasks={tasks}
-        onApply={setTasks}
-        clusters={clusters}
-        activeClusterId={activeClusterId}
-        onSwitchCluster={setActiveClusterId}
-      />
+      <ConnectPanel open={connectOpen} onClose={() => setConnectOpen(false)} />
       {showWelcome ? <Welcome onChoose={handleWelcomeChoice} /> : null}
     </>
   );

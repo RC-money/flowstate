@@ -43,12 +43,36 @@ release. Everything below is on `main` and `origin/main`.
 - `src/lib/commands/run.ts` -- confirm the gate did not widen. Board operations
   only. No cluster creation, no ethering, no styling, no journal.
 
+## Blocker: the MCP server is not shippable yet
+
+Found 2026-08-20 while writing the Connect panel. The headline feature does not
+survive packaging.
+
+- `tauri.conf.json` has **no `resources`**, so `mcp/` is not in the bundle at
+  all. Every path in the Connect panel points at a file the installed app does
+  not have.
+- The server is a dev script, not a distributable: `#!/usr/bin/env tsx`, and it
+  imports `../src/lib/commands` and `../src/hooks/useLocalTasks`. It needs tsx
+  and the whole source tree to run.
+
+The fix is a build step: bundle `mcp/server.ts` and everything it imports into
+one self-contained `mcp/server.js` (esbuild, node platform), ship that via
+`resources`, and have the snippets run it with `node`. `ConnectPanel.tsx` keeps
+the path in a single `SERVER_PATH` constant so there is one place to keep in
+step. Node on the user's machine is a fair assumption for people already
+running Claude Code or Codex, but it is an assumption worth stating on the
+listing.
+
+Until that lands, the Connect panel is accurate about everything except where
+the file is.
+
 ## Known gaps, deliberate
 
 - **No dive animation.** Entering a cluster is a cut, not a fall.
-- **`parse` only knows the three default column names.** "Move X to review" on
-  a custom board falls through to `unknown`. The palette and drag work fine;
-  only the plain-English path is limited.
+- **`parse` only knows the three default column names.** It is no longer
+  reachable from the UI -- Ask Flow was replaced by Connect your AI -- but the
+  MCP server's `flow_move` takes a column name directly and does not go through
+  `parse`, so custom columns work there.
 - **Andromeda is one image at one size** (559KB). It is not art-directed for
   very wide or very tall panes.
 - **The board is still arm64-only** and the Gumroad listing is unwritten --
