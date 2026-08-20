@@ -92,6 +92,7 @@ import type { GraphLink, GraphNode } from "./graphTransforms";
 import { getCelestialPrefs } from "../../lib/celestialStore";
 import {
   moonTintForStatus,
+  moonGlowTintForStatus,
   skinById,
   type SkinId,
   type StatusKey,
@@ -170,6 +171,8 @@ export const drawNode = (
   const prefs = getCelestialPrefs();
   const skin = skinById(prefs.statusSkins[statusKey as StatusKey]);
   const moonTint = moonTintForStatus(prefs, statusKey as StatusKey);
+  // The halo is its own colour: a pale body may burn a red one.
+  const moonGlowTint = moonGlowTintForStatus(prefs, statusKey as StatusKey);
   const palette = { core: skin.accent, glow: glowFrom(skin.accent, 0.45) };
   const planetCenterX = node.x ?? 0;
   const planetCenterY = node.y ?? 0;
@@ -274,7 +277,7 @@ export const drawNode = (
     // only the finished ones meant a fresh task showed no colour at all, which
     // read as the setting doing nothing.
     if (prefs.moonGlow) {
-      ctx.shadowColor = glowFrom(moonTint, p.entry.done ? 0.9 : 0.4);
+      ctx.shadowColor = glowFrom(moonGlowTint, p.entry.done ? 0.9 : 0.4);
       ctx.shadowBlur = p.entry.done ? 9 : 4;
     }
     if (ready && moonSprite) {

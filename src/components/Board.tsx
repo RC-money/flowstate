@@ -36,6 +36,14 @@ export default function Board({
   const [namingColumn, setNamingColumn] = useState(false);
   const [columnDraft, setColumnDraft] = useState("");
 
+  // Same arrangement as the cluster switcher: the palette opens this field
+  // rather than carrying a naming dialog of its own.
+  React.useEffect(() => {
+    const open = () => setNamingColumn(true);
+    window.addEventListener("flowstate:new-column", open);
+    return () => window.removeEventListener("flowstate:new-column", open);
+  }, []);
+
   const handleCardSelection = useCallback(
     (task: Task) => {
       setSelectedCardId(task.id);

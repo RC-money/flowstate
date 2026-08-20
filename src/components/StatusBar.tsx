@@ -1,7 +1,7 @@
 import React from "react";
 import type { Task } from "../hooks/useLocalTasks";
 
-/** The artifact's footer line: system counts plus the hotkey legend. */
+/** The artifact's footer line: what is in this cluster, plus the hotkey legend. */
 const StatusBar: React.FC<{ tasks: Task[] }> = ({ tasks }) => {
   const done = tasks.filter((task) => task.status === "DONE").length;
   const doing = tasks.filter((task) => task.status === "IN PROGRESS").length;
@@ -9,7 +9,7 @@ const StatusBar: React.FC<{ tasks: Task[] }> = ({ tasks }) => {
   return (
     <p className="mt-9 flex flex-wrap justify-center gap-x-6 gap-y-1 font-mono text-[10.5px] uppercase tracking-[0.09em] text-[#6b7799]">
       <span>
-        <b className="font-semibold text-[#a5afff]">{tasks.length}</b> bodies in system
+        <b className="font-semibold text-[#a5afff]">{tasks.length}</b> bodies in cluster
       </span>
       <span>
         <b className="font-semibold text-[#a5afff]">{doing}</b> in motion

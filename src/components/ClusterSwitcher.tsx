@@ -36,6 +36,14 @@ export const ClusterSwitcher = ({
     if (naming) inputRef.current?.focus();
   }, [naming]);
 
+  // The palette opens this field rather than carrying its own naming dialog,
+  // so a cluster gets named in one place however you got here.
+  useEffect(() => {
+    const open = () => setNaming(true);
+    window.addEventListener("flowstate:new-cluster", open);
+    return () => window.removeEventListener("flowstate:new-cluster", open);
+  }, []);
+
   const commit = () => {
     const name = draft.trim();
     if (name) onCreate(name);

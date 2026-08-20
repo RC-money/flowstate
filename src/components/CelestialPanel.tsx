@@ -1,5 +1,6 @@
 import { useCelestialPrefs } from "../hooks/useCelestialPrefs";
 import {
+  moonGlowTintForStatus,
   randomizeCelestialPrefs,
   SKINS,
   STATUS_KEYS,
@@ -93,7 +94,7 @@ const CelestialPanel = () => {
       <div className="mt-5 border-t border-white/10 pt-4">
         <div className="flex items-start justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
-            Moon glow
+            Moons
           </p>
           <button
             type="button"
@@ -110,39 +111,59 @@ const CelestialPanel = () => {
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          What a subtask burns as it orbits. One colour per column; the glow
-          itself can be switched off for flat bodies.
+          What a subtask is made of, and what it burns. The body and its glow
+          are separate colours; the glow can be switched off for flat bodies.
         </p>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          {STATUS_KEYS.map((status) => (
-            <label key={status} className="flex flex-col gap-1.5">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-slate-400">
-                {status}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <input
-                  type="color"
-                  aria-label={`Moon glow for ${status}`}
-                  value={expandHex(prefs.moonTints[status])}
-                  onChange={(event) =>
-                    setPrefs({
-                      ...prefs,
-                      moonTints: { ...prefs.moonTints, [status]: event.target.value },
-                    })
-                  }
-                  className="h-7 w-9 cursor-pointer rounded-lg border border-white/15 bg-transparent [color-scheme:dark]"
-                />
-                <span
-                  aria-hidden="true"
-                  className="h-3 w-3 rounded-full"
-                  style={{
-                    backgroundColor: prefs.moonTints[status],
-                    boxShadow: prefs.moonGlow ? `0 0 7px ${prefs.moonTints[status]}` : "none",
-                  }}
-                />
-              </span>
-            </label>
-          ))}
+          {STATUS_KEYS.map((status) => {
+            const glow = moonGlowTintForStatus(prefs, status);
+            return (
+              <div key={status} className="flex flex-col gap-1.5">
+                <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-slate-400">
+                  {status}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <input
+                    type="color"
+                    aria-label={`Moon colour for ${status}`}
+                    title="Body"
+                    value={expandHex(prefs.moonTints[status])}
+                    onChange={(event) =>
+                      setPrefs({
+                        ...prefs,
+                        moonTints: { ...prefs.moonTints, [status]: event.target.value },
+                      })
+                    }
+                    className="h-7 w-9 cursor-pointer rounded-lg border border-white/15 bg-transparent [color-scheme:dark]"
+                  />
+                  <input
+                    type="color"
+                    aria-label={`Moon glow for ${status}`}
+                    title="Glow"
+                    value={expandHex(glow)}
+                    onChange={(event) =>
+                      setPrefs({
+                        ...prefs,
+                        moonGlowTints: {
+                          ...prefs.moonGlowTints,
+                          [status]: event.target.value,
+                        },
+                      })
+                    }
+                    className="h-7 w-7 cursor-pointer rounded-full border border-white/15 bg-transparent [color-scheme:dark]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="h-3 w-3 rounded-full"
+                    style={{
+                      backgroundColor: prefs.moonTints[status],
+                      boxShadow: prefs.moonGlow ? `0 0 7px ${glow}` : "none",
+                    }}
+                  />
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

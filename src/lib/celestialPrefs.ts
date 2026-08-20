@@ -90,6 +90,12 @@ export interface CelestialPrefs {
   statusSkins: Record<StatusKey, SkinId>;
   /** Colour the subtask moons orbiting a column's planets. */
   moonTints: Record<StatusKey, string>;
+  /**
+   * What that moon throws off, which need not be what the moon is made of --
+   * a pale body can burn a red halo. Absent means "the same as the body", so
+   * every board saved before this existed looks exactly as it did.
+   */
+  moonGlowTints: Partial<Record<StatusKey, string>>;
   /** Fill for the subtask starbursts on board chips. */
   starColor: string;
   /** Which star burns at the centre of HELIOS. */
@@ -112,6 +118,8 @@ export const DEFAULT_CELESTIAL_PREFS: CelestialPrefs = {
     "IN PROGRESS": "#f7e28b",
     DONE: "#f7e28b",
   },
+  // Empty on purpose: until a glow is set it follows the body it came from.
+  moonGlowTints: {},
   starColor: "#ffce5c",
   sun: "sol",
   moonGlow: true,
@@ -149,6 +157,17 @@ export const normalizeCelestialPrefs = (raw: unknown): CelestialPrefs => {
         : DEFAULT_CELESTIAL_PREFS.moonTints[key];
   }
 
+  // Only real colours are kept; a missing entry means "follow the body", which
+  // is a meaningful state rather than a gap to fill with a default.
+  const glowRaw = isRecord(raw.moonGlowTints) ? raw.moonGlowTints : {};
+  const moonGlowTints: Partial<Record<StatusKey, string>> = {};
+  for (const key of STATUS_KEYS) {
+    const candidate = glowRaw[key];
+    if (typeof candidate === "string" && HEX_COLOR.test(candidate)) {
+      moonGlowTints[key] = candidate;
+    }
+  }
+
   const colorRaw = raw.starColor;
   const starColor =
     typeof colorRaw === "string" && HEX_COLOR.test(colorRaw)
@@ -163,11 +182,18 @@ export const normalizeCelestialPrefs = (raw: unknown): CelestialPrefs => {
 
   const moonGlow = typeof raw.moonGlow === "boolean" ? raw.moonGlow : DEFAULT_CELESTIAL_PREFS.moonGlow;
 
-  return { statusSkins, moonTints, starColor, sun, moonGlow };
+  return { statusSkins, moonTints, moonGlowTints, starColor, sun, moonGlow };
 };
 
 export const accentForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
   skinById(prefs.statusSkins[status] ?? SKINS[0].id).accent;
+
+/**
+ * What the moon throws off. Falls back to the body's own colour, so a board
+ * that has never touched this looks exactly as it always did.
+ */
+export const moonGlowTintForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
+  prefs.moonGlowTints?.[status] ?? moonTintForStatus(prefs, status);
 
 export const moonTintForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
   prefs.moonTints[status] ??
@@ -203,6 +229,9 @@ export const randomizeCelestialPrefs = (
   return {
     statusSkins,
     moonTints,
+    // A rolled theme leaves the glow following its body; setting it apart is a
+    // deliberate choice, not something a dice roll should make for you.
+    moonGlowTints: {},
     starColor: pick(SKINS, random).accent,
     sun: pick(SUNS, random).id,
     moonGlow: true,

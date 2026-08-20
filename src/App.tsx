@@ -763,6 +763,26 @@ function AppShell() {
         },
       },
       {
+        id: "cmd-new-cluster",
+        label: "New Cluster",
+        hint: "C",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          // The switcher owns the naming field; the palette just opens it, so
+          // there is one place a cluster gets named however you got there.
+          window.dispatchEvent(new CustomEvent("flowstate:new-cluster"));
+        },
+      },
+      {
+        id: "cmd-new-column",
+        label: "New Column",
+        hint: "L",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          window.dispatchEvent(new CustomEvent("flowstate:new-column"));
+        },
+      },
+      {
         id: "cmd-observatory",
         label: "Open Observatory",
         hint: "O",
