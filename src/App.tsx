@@ -52,6 +52,15 @@ import { shouldShowWelcome } from "./lib/storage/firstRun";
 import { ToastProvider, useToast } from "./components/Toast";
 import { logEvent, setAnalyticsEnabled } from "./lib/analytics";
 import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/useLocalTasks";
+import {
+  canEther,
+  etherCluster,
+  liveClusters,
+  makeCluster,
+  nextActiveClusterId,
+  tasksInCluster,
+} from "./lib/clusters/clusters";
+import ClusterSwitcher from "./components/ClusterSwitcher";
 import { stampCompletion } from "./lib/earnedStars";
 import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
@@ -96,6 +105,7 @@ const seedTask = (
 // Staggered ages so the graph's temporal links and the decay curve have
 // something real to read on a first run.
 const WELCOME_KEY = "flowstate:v1:welcomed";
+const CLUSTER_KEY = "flowstate:cluster";
 
 const initialTasks: Task[] = [
   seedTask("t1", "Create dashboard components", "TO-DO", 6),
@@ -146,7 +156,11 @@ function AppShell() {
   const { show } = useToast();
   const { updateMetrics, metrics: biomeMetrics } = useBiome();
   const { tethers, constellations, addTether, setConstellations } = useCelestialStructures();
-  const [tasks, setTasks, hydration] = useLocalTasks(initialTasks);
+  const [tasks, setTasks, hydration, clusters, setClusters] = useLocalTasks(initialTasks);
+  const [activeClusterId, setActiveClusterId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.sessionStorage.getItem(CLUSTER_KEY);
+  });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -182,12 +196,39 @@ function AppShell() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddSourceRef = useRef<"keyboard" | "click">("click");
   const { engine: observerEngine } = useObserverEngine({ tasks });
-  const visibleTasks = useMemo(
-    () => tasks.filter((task) => !task.darkForest && task.etheredAt === undefined),
-    [tasks]
+  const liveClusterList = useMemo(() => liveClusters(clusters), [clusters]);
+  // One cluster at a time. Everything below reads the board through this, so a
+  // task in another project never leaks onto the columns or into a count.
+  const clusterTasks = useMemo(
+    () => (activeClusterId ? tasksInCluster(tasks, activeClusterId) : tasks),
+    [tasks, activeClusterId]
   );
-  const etherealTasks = useMemo(() => tasks.filter((task) => task.etheredAt !== undefined), [tasks]);
-  const darkForestTasks = useMemo(() => tasks.filter((task) => task.darkForest), [tasks]);
+  const visibleTasks = useMemo(
+    () => clusterTasks.filter((task) => !task.darkForest && task.etheredAt === undefined),
+    [clusterTasks]
+  );
+  const openCountsByCluster = useMemo(() => {
+    const counts: Record<string, number> = {};
+    tasks.forEach((task) => {
+      if (task.darkForest || task.etheredAt !== undefined || task.status === "DONE") return;
+      const id = task.clusterId;
+      if (!id) return;
+      counts[id] = (counts[id] ?? 0) + 1;
+    });
+    return counts;
+  }, [tasks]);
+  const activeCanEther = useMemo(
+    () => (activeClusterId ? canEther(tasks, activeClusterId) : false),
+    [tasks, activeClusterId]
+  );
+  const etherealTasks = useMemo(
+    () => clusterTasks.filter((task) => task.etheredAt !== undefined),
+    [clusterTasks]
+  );
+  const darkForestTasks = useMemo(
+    () => clusterTasks.filter((task) => task.darkForest),
+    [clusterTasks]
+  );
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -419,7 +460,7 @@ function AppShell() {
       setTasks((prev) => {
         const stamped = stampCompletion(task, task.status, Date.now());
         if (modalMode === "new") {
-          return [...prev, stamped];
+          return [...prev, { ...stamped, clusterId: activeClusterId ?? stamped.clusterId }];
         }
         return prev.map((t) =>
           t.id === task.id ? stampCompletion({ ...t, ...task }, task.status, Date.now()) : t
@@ -445,13 +486,25 @@ function AppShell() {
       }
       closeModal();
     },
-    [modalMode, closeModal, pushToast, tasksById]
+    [modalMode, closeModal, pushToast, tasksById, activeClusterId]
   );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.sessionStorage.setItem("flowstate:view", view);
   }, [view]);
+
+  // The active cluster has to survive hydration, an outside edit, and its own
+  // ethering. Reconciling against the cluster list covers all three: it keeps
+  // the current one while it is live and falls to the oldest otherwise.
+  useEffect(() => {
+    setActiveClusterId((prev) => nextActiveClusterId(clusters, prev));
+  }, [clusters]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !activeClusterId) return;
+    window.sessionStorage.setItem(CLUSTER_KEY, activeClusterId);
+  }, [activeClusterId]);
 
   const handleExportTasks = useCallback(() => {
     try {
@@ -497,11 +550,47 @@ function AppShell() {
     [pushToast]
   );
 
+  const handleCreateCluster = useCallback(
+    (name: string) => {
+      const now = Date.now();
+      const cluster = makeCluster(name, now, `c_${now}_${Math.random().toString(36).slice(2, 8)}`);
+      setClusters((prev) => [...prev, cluster]);
+      setActiveClusterId(cluster.id);
+      pushToast(`"${cluster.name}" is forming.`, "success");
+    },
+    [pushToast, setClusters]
+  );
+
+  const handleEtherCluster = useCallback(() => {
+    if (!activeClusterId) return;
+    const cluster = clusters.find((entry) => entry.id === activeClusterId);
+    // Guarded here as well as in the UI: nothing should be able to end a
+    // project that still has work in it.
+    if (!cluster || !canEther(tasks, activeClusterId)) return;
+    setClusters((prev) => etherCluster(prev, activeClusterId, Date.now()));
+    pushToast(`"${cluster.name}" is a galaxy now.`, "success");
+  }, [activeClusterId, clusters, tasks, pushToast, setClusters]);
+
   const handleViewChange = (nextView: ViewMode) => {
     setView(nextView);
   };
 
+  // Cmd-1..9 jumps straight to a cluster. The pills carry the same numbers, so
+  // the shortcut is discoverable rather than folklore.
+  const clusterHotkeys = useMemo(
+    () =>
+      liveClusterList.slice(0, 9).map((cluster, index) => ({
+        combo: `mod+${index + 1}`,
+        handler: () => setActiveClusterId(cluster.id),
+        enabled: !isModalOpen,
+        preventDefault: true,
+        stopPropagation: true,
+      })),
+    [liveClusterList, isModalOpen]
+  );
+
   useHotkeys([
+    ...clusterHotkeys,
     {
       combo: "n",
       handler: () => handleAddTask(focusedColumn ?? "TO-DO", "keyboard"),
@@ -661,7 +750,11 @@ function AppShell() {
       {showGraph ? (
         <div className="pointer-events-none fixed inset-0 -z-10">
           <React.Suspense fallback={null}>
-            <GraphView tasks={tasks} onOpenTask={handleOpenTaskById} onCreateTether={handleCreateTether} />
+            <GraphView
+              tasks={clusterTasks}
+              onOpenTask={handleOpenTaskById}
+              onCreateTether={handleCreateTether}
+            />
           </React.Suspense>
         </div>
       ) : null}
@@ -719,6 +812,18 @@ function AppShell() {
             >
               Settings
             </button>
+          </div>
+
+          <div className="mt-3">
+            <ClusterSwitcher
+              clusters={liveClusterList}
+              activeId={activeClusterId}
+              counts={openCountsByCluster}
+              onSelect={setActiveClusterId}
+              onCreate={handleCreateCluster}
+              canEther={activeCanEther}
+              onEther={handleEtherCluster}
+            />
           </div>
         </header>
 
@@ -836,7 +941,15 @@ function AppShell() {
         onGlobalOpen={handlePaletteOpen}
       />
 
-      <AskFlowPanel open={askOpen} onClose={() => setAskOpen(false)} tasks={tasks} onApply={setTasks} />
+      <AskFlowPanel
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        tasks={tasks}
+        onApply={setTasks}
+        clusters={clusters}
+        activeClusterId={activeClusterId}
+        onSwitchCluster={setActiveClusterId}
+      />
       {showWelcome ? <Welcome onChoose={handleWelcomeChoice} /> : null}
     </>
   );

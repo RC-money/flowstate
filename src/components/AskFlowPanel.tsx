@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { execute, type CommandResult } from "../lib/commands";
 import type { Task } from "../hooks/useLocalTasks";
+import type { Cluster } from "../lib/clusters/clusters";
 import { useToast } from "./Toast";
 
 interface AskFlowPanelProps {
@@ -8,6 +9,9 @@ interface AskFlowPanelProps {
   onClose: () => void;
   tasks: Task[];
   onApply: (next: Task[]) => void;
+  clusters: Cluster[];
+  activeClusterId: string | null;
+  onSwitchCluster: (id: string) => void;
 }
 
 /**
@@ -15,7 +19,15 @@ interface AskFlowPanelProps {
  * "what's rotting". Same parse -> resolve -> run path the MCP server uses,
  * so anything it can do is board-only and always refusable/undoable.
  */
-export default function AskFlowPanel({ open, onClose, tasks, onApply }: AskFlowPanelProps) {
+export default function AskFlowPanel({
+  open,
+  onClose,
+  tasks,
+  onApply,
+  clusters,
+  activeClusterId,
+  onSwitchCluster,
+}: AskFlowPanelProps) {
   const { show } = useToast();
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<CommandResult | null>(null);
@@ -50,11 +62,20 @@ export default function AskFlowPanel({ open, onClose, tasks, onApply }: AskFlowP
     event.preventDefault();
     const text = prompt.trim();
     if (!text) return;
-    const outcome = execute(text, tasks, Date.now());
+    const outcome = execute(text, tasks, Date.now(), {
+      clusters,
+      ...(activeClusterId ? { activeClusterId } : {}),
+    });
     setResult(outcome);
     if (outcome.undo) {
       onApply(outcome.tasks);
       setUndoBoard(outcome.undo);
+      show(outcome.message, { variant: "success" });
+    }
+    // "switch to gardening" changes nothing on the board, so it reports the
+    // cluster to show rather than a new task list.
+    if (outcome.activeClusterId) {
+      onSwitchCluster(outcome.activeClusterId);
       show(outcome.message, { variant: "success" });
     }
     setPrompt("");
