@@ -16,6 +16,36 @@ release. Everything below is on `main` and `origin/main`.
   leaving the sky.
 - **Two new commands**: `switch` and `assign`.
 
+## Tested 2026-08-20
+
+A pass against real files, driven through the server bundle that actually
+ships, plus the app in a browser. 39 file-level assertions and the 418 unit
+tests. Three bugs found and fixed; all are in the commits below.
+
+1. **A write against an unreadable file wiped it.** A truncated or half-written
+   board parsed as nothing, and the next write saved an empty board over it --
+   reporting success. The file could have been one retry from fine. The server
+   now distinguishes "no file yet" from "file there but unreadable" and refuses
+   to write on the second, saying why.
+2. **Removing a column kept completedAt.** A card relocated out of the finish
+   line landed in the first column still claiming it was finished, and went on
+   earning a star. It goes through `stampCompletion` now.
+3. **Assigning across clusters stranded the task.** Clusters have their own
+   columns, and the task carried its old one over. The board draws a column's
+   cards by matching status, so a status the new cluster had no column for
+   showed up nowhere. It lands in the matching column when there is one, the
+   first column otherwise, surrendering completedAt if that is not the finish
+   line.
+
+Covered and passing: pre-clusters boards read and upgraded without losing
+tags, dueDate or completedAt; ten shapes of damaged file repaired rather than
+rejected; multi-cluster boards with custom columns; ethered clusters hidden and
+unreachable by name; column removal relocating cards; legacy localStorage
+migration in the app.
+
+Not covered: the Tauri file watcher (needs the packaged app), drag and drop,
+and anything about how it looks.
+
 ## Test first, because these can lose data
 
 1. **Open an old board.** A `tasks.json` written before any of this is a bare

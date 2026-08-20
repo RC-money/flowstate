@@ -660,10 +660,18 @@ function AppShell() {
       const remaining = removeColumn(activeColumns, columnId);
       if (remaining === activeColumns) return;
       const landing = remaining[0].id;
+      const now = Date.now();
       setTasks((prev) =>
         prev.map((task) =>
           task.clusterId === activeClusterId && task.status === columnId
-            ? touchTask({ ...task, status: landing }, Date.now())
+            ? // Through stampCompletion, not around it: a card relocated out of
+              // the finish line keeps claiming it was completed otherwise, and
+              // goes on earning a star for work that is back in the first
+              // column.
+              touchTask(
+                { ...stampCompletion(task, landing, now, remaining), status: landing },
+                now
+              )
             : task
         )
       );

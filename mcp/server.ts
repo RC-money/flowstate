@@ -44,14 +44,37 @@ const FILE = dataFile();
  * and the `{ clusters, tasks }` object the app writes now, so an older file is
  * read rather than mistaken for an empty board.
  */
-const loadBoard = async (): Promise<Board> => {
+interface Loaded {
+  board: Board;
+  /**
+   * The file is there but could not be read as a board. Distinct from "no file
+   * yet", and the difference decides whether writing is safe: a half-written
+   * save is a normal thing to catch mid-write, and its bytes are still the
+   * user's data. Treating that as an empty board and saving over it destroys
+   * work that was one retry away from being fine.
+   */
+  damaged: boolean;
+}
+
+const loadBoard = async (): Promise<Loaded> => {
+  let raw: string;
   try {
-    const raw = await readFile(FILE, "utf8");
-    return normalizeBoard(JSON.parse(raw), Date.now()) ?? { clusters: [], tasks: [] };
+    raw = await readFile(FILE, "utf8");
   } catch {
-    return { clusters: [], tasks: [] };
+    // No file yet. A first write is expected to create one.
+    return { board: { clusters: [], tasks: [] }, damaged: false };
   }
+  let board: Board | null = null;
+  try {
+    board = normalizeBoard(JSON.parse(raw), Date.now());
+  } catch {
+    board = null;
+  }
+  if (!board) return { board: { clusters: [], tasks: [] }, damaged: true };
+  return { board, damaged: false };
 };
+
+const DAMAGED = "The board file could not be read, so nothing was changed. It may be mid-write -- try again in a moment. If it stays unreadable, the file is damaged and needs looking at before anything writes over it.";
 
 /**
  * Writes the whole board back, clusters included. Writing only the tasks --
@@ -97,7 +120,12 @@ const brief = (task: Task, board?: Board) => ({
 });
 
 const executeCommand = (command: Command) => serialized(async () => {
-  const board = await loadBoard();
+  const { board, damaged } = await loadBoard();
+  // Refuse rather than write. The alternative is reporting success while
+  // replacing a damaged board with an empty one.
+  if (damaged) {
+    return { content: [{ type: "text" as const, text: DAMAGED }], isError: true };
+  }
   activeClusterId = nextActiveClusterId(board.clusters, activeClusterId);
   const result = run(command, board.tasks, Date.now(), {
     clusters: board.clusters,
@@ -153,7 +181,10 @@ server.tool(
   "List the projects (clusters) on this board, and say which one you are working in. Each has its own columns.",
   {},
   async () => serialized(async () => {
-    const board = await loadBoard();
+    const { board, damaged } = await loadBoard();
+    if (damaged) {
+      return { content: [{ type: "text" as const, text: DAMAGED }], isError: true };
+    }
     activeClusterId = nextActiveClusterId(board.clusters, activeClusterId);
     const payload = {
       working_in: board.clusters.find((c) => c.id === activeClusterId)?.name ?? null,

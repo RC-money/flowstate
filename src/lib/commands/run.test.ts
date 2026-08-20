@@ -255,6 +255,72 @@ describe("run: clusters", () => {
     expect(result.listed?.map((t) => t.id)).toEqual(["t1", "t2"]);
   });
 
+  test("assign lands the task in a column the new cluster actually has", () => {
+    // Otherwise the task is invisible: the board renders a column's cards by
+    // matching status, so a status no column has shows up nowhere at all.
+    const clustersWithOwnColumns = [
+      {
+        id: "c_1",
+        name: "Alpha",
+        createdAt: NOW,
+        columns: [
+          { id: "A1", name: "Inbox" },
+          { id: "A2", name: "Shipped" },
+        ],
+      },
+      {
+        id: "c_2",
+        name: "Beta",
+        createdAt: NOW,
+        columns: [
+          { id: "B1", name: "Ideas" },
+          { id: "B2", name: "Built" },
+        ],
+      },
+    ];
+    const wanderer = [task("t1", "Wanderer", { clusterId: "c_1", status: "A2" })];
+
+    const result = run({ kind: "assign", target: "wanderer", cluster: "beta" }, wanderer, NOW, {
+      clusters: clustersWithOwnColumns,
+    });
+    const moved = result.tasks[0];
+
+    expect(moved.clusterId).toBe("c_2");
+    expect(["B1", "B2"]).toContain(moved.status);
+  });
+
+  test("assign keeps the column when the new cluster has one by that name", () => {
+    const shared = [
+      { id: "c_1", name: "Alpha", createdAt: NOW, columns: DEFAULT_COLUMNS },
+      { id: "c_2", name: "Beta", createdAt: NOW, columns: DEFAULT_COLUMNS },
+    ];
+    const inFlight = [
+      task("t1", "Halfway", { clusterId: "c_1", status: "IN PROGRESS" }),
+    ];
+
+    const result = run({ kind: "assign", target: "halfway", cluster: "beta" }, inFlight, NOW, {
+      clusters: shared,
+    });
+
+    expect(result.tasks[0].status).toBe("IN PROGRESS");
+  });
+
+  test("assign surrenders completedAt when the task lands somewhere unfinished", () => {
+    const clustersWithOwnColumns = [
+      { id: "c_1", name: "Alpha", createdAt: NOW, columns: [{ id: "A1", name: "In" }, { id: "A2", name: "Done" }] },
+      { id: "c_2", name: "Beta", createdAt: NOW, columns: [{ id: "B1", name: "Ideas" }, { id: "B2", name: "Built" }] },
+    ];
+    const finished = [
+      task("t1", "Was finished", { clusterId: "c_1", status: "A2", completedAt: NOW }),
+    ];
+
+    const result = run({ kind: "assign", target: "finished", cluster: "beta" }, finished, NOW, {
+      clusters: clustersWithOwnColumns,
+    });
+
+    expect(result.tasks[0].completedAt).toBeUndefined();
+  });
+
   test("listing is unchanged when no clusters are supplied", () => {
     const result = run({ kind: "list", filter: "open" }, clustered, NOW);
 

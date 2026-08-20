@@ -171,8 +171,22 @@ export const run = (
           if (task.clusterId === cluster.id) {
             return refuse(`"${task.title}" is already in "${cluster.name}".`);
           }
+          // A task carries its column with it, and the new cluster may not have
+          // one by that name. Left alone it lands in a column that does not
+          // exist there, and the board -- which draws a column's cards by
+          // matching status -- shows it nowhere at all.
+          const landing = cluster.columns.some((column) => column.id === task.status)
+            ? task.status
+            : cluster.columns[0]?.id ?? task.status;
           const next = replace(task.id, (current) =>
-            touchTask({ ...current, clusterId: cluster.id }, now)
+            touchTask(
+              {
+                ...stampCompletion(current, landing, now, cluster.columns),
+                status: landing,
+                clusterId: cluster.id,
+              },
+              now
+            )
           );
           return mutate(next, `Moved "${task.title}" to "${cluster.name}".`);
         })
