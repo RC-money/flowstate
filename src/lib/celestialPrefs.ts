@@ -89,6 +89,8 @@ export interface CelestialPrefs {
   starColor: string;
   /** Which star burns at the centre of HELIOS. */
   sun: SunId;
+  /** Whether subtask moons throw light, or sit as plain bodies. */
+  moonGlow: boolean;
 }
 
 export const DEFAULT_CELESTIAL_PREFS: CelestialPrefs = {
@@ -107,6 +109,7 @@ export const DEFAULT_CELESTIAL_PREFS: CelestialPrefs = {
   },
   starColor: "#ffce5c",
   sun: "sol",
+  moonGlow: true,
 };
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -153,7 +156,9 @@ export const normalizeCelestialPrefs = (raw: unknown): CelestialPrefs => {
       ? (sunRaw as SunId)
       : DEFAULT_CELESTIAL_PREFS.sun;
 
-  return { statusSkins, moonTints, starColor, sun };
+  const moonGlow = typeof raw.moonGlow === "boolean" ? raw.moonGlow : DEFAULT_CELESTIAL_PREFS.moonGlow;
+
+  return { statusSkins, moonTints, starColor, sun, moonGlow };
 };
 
 export const accentForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
@@ -193,5 +198,6 @@ export const randomizeCelestialPrefs = (
     moonTints,
     starColor: pick(SKINS, random).accent,
     sun: pick(SUNS, random).id,
+    moonGlow: true,
   };
 };

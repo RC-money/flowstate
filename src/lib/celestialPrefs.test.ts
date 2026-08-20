@@ -198,3 +198,28 @@ describe("normalizeCelestialPrefs with a sun", () => {
     expect(result.starColor).toBe(DEFAULT_CELESTIAL_PREFS.starColor);
   });
 });
+
+describe("moonGlow toggle", () => {
+  it("is on by default", () => {
+    expect(DEFAULT_CELESTIAL_PREFS.moonGlow).toBe(true);
+  });
+
+  it("keeps an explicit false", () => {
+    expect(normalizeCelestialPrefs({ moonGlow: false }).moonGlow).toBe(false);
+  });
+
+  it("keeps an explicit true", () => {
+    expect(normalizeCelestialPrefs({ moonGlow: true }).moonGlow).toBe(true);
+  });
+
+  it("repairs a non-boolean back to on", () => {
+    expect(normalizeCelestialPrefs({ moonGlow: "yes" }).moonGlow).toBe(true);
+    expect(normalizeCelestialPrefs({ moonGlow: 0 }).moonGlow).toBe(true);
+  });
+
+  it("does not lose the toggle when another field is broken", () => {
+    const result = normalizeCelestialPrefs({ moonGlow: false, sun: "banana" });
+    expect(result.moonGlow).toBe(false);
+    expect(result.sun).toBe("sol");
+  });
+});

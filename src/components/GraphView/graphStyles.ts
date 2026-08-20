@@ -273,8 +273,10 @@ export const drawNode = (
     // Every moon carries the colour, finished ones just burn brighter. Glowing
     // only the finished ones meant a fresh task showed no colour at all, which
     // read as the setting doing nothing.
-    ctx.shadowColor = glowFrom(moonTint, p.entry.done ? 0.9 : 0.4);
-    ctx.shadowBlur = p.entry.done ? 9 : 4;
+    if (prefs.moonGlow) {
+      ctx.shadowColor = glowFrom(moonTint, p.entry.done ? 0.9 : 0.4);
+      ctx.shadowBlur = p.entry.done ? 9 : 4;
+    }
     if (ready && moonSprite) {
       ctx.beginPath();
       ctx.arc(p.sx, p.sy, p.moonR, 0, Math.PI * 2);

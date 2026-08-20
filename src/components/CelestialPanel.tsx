@@ -91,11 +91,27 @@ const CelestialPanel = () => {
       </div>
 
       <div className="mt-5 border-t border-white/10 pt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
-          Moon glow
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+            Moon glow
+          </p>
+          <button
+            type="button"
+            aria-pressed={prefs.moonGlow}
+            onClick={() => setPrefs({ ...prefs, moonGlow: !prefs.moonGlow })}
+            className={[
+              "shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition",
+              prefs.moonGlow
+                ? "border-amber-300/70 bg-amber-400/15 text-amber-100"
+                : "border-white/15 text-slate-400 hover:bg-white/10",
+            ].join(" ")}
+          >
+            {prefs.moonGlow ? "Glow on" : "Glow off"}
+          </button>
+        </div>
         <p className="mt-1 text-xs text-slate-500">
-          What a finished subtask burns as it orbits. One per column.
+          What a subtask burns as it orbits. One colour per column; the glow
+          itself can be switched off for flat bodies.
         </p>
         <div className="mt-3 grid grid-cols-3 gap-2">
           {STATUS_KEYS.map((status) => (
@@ -121,7 +137,7 @@ const CelestialPanel = () => {
                   className="h-3 w-3 rounded-full"
                   style={{
                     backgroundColor: prefs.moonTints[status],
-                    boxShadow: `0 0 7px ${prefs.moonTints[status]}`,
+                    boxShadow: prefs.moonGlow ? `0 0 7px ${prefs.moonTints[status]}` : "none",
                   }}
                 />
               </span>
