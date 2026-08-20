@@ -1,7 +1,8 @@
 import { touchTask, type Task } from "../../hooks/useLocalTasks";
+import { isLive, type Cluster } from "../clusters/clusters";
 import { stampCompletion } from "../earnedStars";
 import { decayLevel } from "../orbitalDecay";
-import { resolve } from "./resolve";
+import { resolve, resolveCluster } from "./resolve";
 import type { Command, ListFilter } from "./types";
 
 export interface CommandResult {
@@ -16,6 +17,17 @@ export interface CommandResult {
    * changed -- its absence is how callers know there is nothing to revert.
    */
   undo?: Task[];
+  /** Which cluster the board should show next. Only `switch` sets it. */
+  activeClusterId?: string;
+}
+
+/** What `run` needs to know beyond the tasks themselves. All optional, so a
+ * caller that has never heard of clusters still behaves as it always did. */
+export interface RunOptions {
+  clusters?: Cluster[];
+  /** The cluster the user is looking at. New tasks land here. */
+  activeClusterId?: string;
+  makeId?: (now: number) => string;
 }
 
 const defaultId = (now: number): string =>
@@ -26,6 +38,18 @@ const isOpen = (task: Task): boolean =>
   task.status !== "DONE" && !task.darkForest && task.etheredAt === undefined;
 
 const quote = (tasks: Task[]): string => tasks.map((task) => `"${task.title}"`).join(", ");
+
+/**
+ * Tasks still on the board. Work inside an ethered cluster is out in the deep
+ * field and does not answer questions about what's open. Callers that pass no
+ * clusters -- an MCP server on an older board -- see everything, as before.
+ */
+const visible = (tasks: Task[], clusters?: Cluster[]): Task[] => {
+  if (!clusters?.length) return tasks;
+  const gone = new Set(clusters.filter((cluster) => !isLive(cluster)).map((c) => c.id));
+  if (!gone.size) return tasks;
+  return tasks.filter((task) => !task.clusterId || !gone.has(task.clusterId));
+};
 
 /**
  * Stages 2 and 3: resolve the user's words to a real task, then act.
@@ -39,8 +63,9 @@ export const run = (
   command: Command,
   tasks: Task[],
   now: number,
-  makeId: (now: number) => string = defaultId
+  options: RunOptions = {}
 ): CommandResult => {
+  const { clusters, activeClusterId, makeId = defaultId } = options;
   const refuse = (message: string): CommandResult => ({ tasks, message });
   const mutate = (next: Task[], message: string): CommandResult => ({
     tasks: next,
@@ -59,6 +84,20 @@ export const run = (
       return refuse(`"${target}" could mean ${quote(found.candidates)}. Be more specific.`);
     }
     return act(found.task);
+  };
+
+  /** The same front half for a cluster name. Refuses on the same terms. */
+  const withCluster = (
+    target: string,
+    act: (cluster: Cluster) => CommandResult
+  ): CommandResult => {
+    const found = resolveCluster(target, clusters ?? []);
+    if (found.kind === "miss") return refuse(`No cluster matches "${target}".`);
+    if (found.kind === "ambiguous") {
+      const names = found.candidates.map((cluster) => `"${cluster.name}"`).join(", ");
+      return refuse(`"${target}" could mean ${names}. Be more specific.`);
+    }
+    return act(found.cluster);
   };
 
   const replace = (id: string, change: (task: Task) => Task): Task[] =>
@@ -106,12 +145,33 @@ export const run = (
         status: "TO-DO",
         createdAt: now,
         updatedAt: now,
+        ...(activeClusterId ? { clusterId: activeClusterId } : {}),
       };
       return mutate([...tasks, created], `Added "${title}".`);
     }
 
+    case "switch":
+      return withCluster(command.target, (cluster) => ({
+        tasks,
+        message: `Switched to "${cluster.name}".`,
+        activeClusterId: cluster.id,
+      }));
+
+    case "assign":
+      return withTarget(command.target, (task) =>
+        withCluster(command.cluster, (cluster) => {
+          if (task.clusterId === cluster.id) {
+            return refuse(`"${task.title}" is already in "${cluster.name}".`);
+          }
+          const next = replace(task.id, (current) =>
+            touchTask({ ...current, clusterId: cluster.id }, now)
+          );
+          return mutate(next, `Moved "${task.title}" to "${cluster.name}".`);
+        })
+      );
+
     case "list": {
-      const listed = selectList(command.filter, tasks, now);
+      const listed = selectList(command.filter, visible(tasks, clusters), now);
       return {
         tasks,
         listed,

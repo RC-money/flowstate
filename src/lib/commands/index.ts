@@ -1,12 +1,12 @@
 import type { Task } from "../../hooks/useLocalTasks";
 import { parse } from "./parse";
-import { run, type CommandResult } from "./run";
+import { run, type CommandResult, type RunOptions } from "./run";
 
 export type { Command, ListFilter } from "./types";
-export type { CommandResult } from "./run";
-export type { Resolution } from "./resolve";
+export type { CommandResult, RunOptions } from "./run";
+export type { Resolution, ClusterResolution } from "./resolve";
 export { parse } from "./parse";
-export { resolve } from "./resolve";
+export { resolve, resolveCluster } from "./resolve";
 export { run } from "./run";
 
 /**
@@ -19,5 +19,6 @@ export { run } from "./run";
 export const execute = (
   text: string,
   tasks: Task[],
-  now: number
-): CommandResult => run(parse(text), tasks, now);
+  now: number,
+  options: RunOptions = {}
+): CommandResult => run(parse(text), tasks, now, options);

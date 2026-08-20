@@ -16,6 +16,8 @@ export type Command =
   | { kind: "darkForest"; target: string }
   | { kind: "restore"; target: string }
   | { kind: "create"; title: string }
+  | { kind: "switch"; target: string }
+  | { kind: "assign"; target: string; cluster: string }
   | { kind: "unknown"; text: string };
 
 export type ListFilter = "open" | "done" | "decaying" | "dark";

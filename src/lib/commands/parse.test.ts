@@ -41,3 +41,42 @@ describe("parse: unknown", () => {
     });
   });
 });
+
+describe("parse: switch", () => {
+  test("'switch to Flowstate v2' changes cluster", () => {
+    expect(parse("switch to Flowstate v2")).toEqual({
+      kind: "switch",
+      target: "flowstate v2",
+    });
+  });
+
+  test("'go to gardening' changes cluster", () => {
+    expect(parse("go to gardening")).toEqual({ kind: "switch", target: "gardening" });
+  });
+
+  test("'switch gardening' works without the preposition", () => {
+    expect(parse("switch gardening")).toEqual({ kind: "switch", target: "gardening" });
+  });
+
+  test("a bare 'switch' names no cluster and is not a command", () => {
+    expect(parse("switch").kind).toBe("unknown");
+  });
+});
+
+describe("parse: assign", () => {
+  test("'assign auth to Flowstate v2' moves a task between clusters", () => {
+    expect(parse("assign auth to Flowstate v2")).toEqual({
+      kind: "assign",
+      target: "auth",
+      cluster: "flowstate v2",
+    });
+  });
+
+  test("moving to a status still beats moving to a cluster", () => {
+    expect(parse("move auth to done")).toEqual({
+      kind: "move",
+      target: "auth",
+      to: "DONE",
+    });
+  });
+});

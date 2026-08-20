@@ -129,7 +129,9 @@ describe("run: dark forest", () => {
 
 describe("run: create", () => {
   test("appends a TO-DO task with the given title", () => {
-    const result = run({ kind: "create", title: "Book the venue" }, board, NOW, () => "t9");
+    const result = run({ kind: "create", title: "Book the venue" }, board, NOW, {
+      makeId: () => "t9",
+    });
     expect(result.tasks).toHaveLength(4);
     expect(result.tasks[3]).toMatchObject({
       id: "t9",
@@ -144,5 +146,117 @@ describe("run: create", () => {
     const result = run({ kind: "create", title: "   " }, board, NOW);
     expect(result.tasks).toEqual(board);
     expect(result.undo).toBeUndefined();
+  });
+});
+
+describe("run: clusters", () => {
+  const clusters = [
+    { id: "c_1", name: "Flowstate v2", createdAt: NOW },
+    { id: "c_2", name: "Gardening", createdAt: NOW },
+    { id: "c_3", name: "Shipped", createdAt: NOW, etheredAt: NOW },
+  ];
+  const clustered = [
+    task("t1", "Refactor auth middleware", { clusterId: "c_1" }),
+    task("t2", "Prune the roses", { clusterId: "c_2" }),
+    task("t3", "Old finished work", { clusterId: "c_3" }),
+  ];
+
+  test("switch reports the cluster to make active", () => {
+    const result = run({ kind: "switch", target: "gardening" }, clustered, NOW, { clusters });
+
+    expect(result.activeClusterId).toBe("c_2");
+    expect(result.message).toBe('Switched to "Gardening".');
+  });
+
+  test("switch changes no tasks, so there is nothing to undo", () => {
+    const result = run({ kind: "switch", target: "gardening" }, clustered, NOW, { clusters });
+
+    expect(result.tasks).toBe(clustered);
+    expect(result.undo).toBeUndefined();
+  });
+
+  test("switch refuses a cluster it cannot find", () => {
+    const result = run({ kind: "switch", target: "astrophysics" }, clustered, NOW, { clusters });
+
+    expect(result.activeClusterId).toBeUndefined();
+    expect(result.message).toContain("No cluster matches");
+  });
+
+  test("switch refuses rather than guessing between two clusters", () => {
+    const twins = [
+      { id: "c_1", name: "Launch", createdAt: NOW },
+      { id: "c_2", name: "Launch", createdAt: NOW },
+    ];
+    const result = run({ kind: "switch", target: "launch" }, clustered, NOW, {
+      clusters: twins,
+    });
+
+    expect(result.activeClusterId).toBeUndefined();
+    expect(result.message).toContain("Be more specific");
+  });
+
+  test("assign moves a task into another cluster", () => {
+    const result = run({ kind: "assign", target: "auth", cluster: "gardening" }, clustered, NOW, {
+      clusters,
+    });
+
+    expect(result.tasks.find((t) => t.id === "t1")?.clusterId).toBe("c_2");
+    expect(result.message).toBe('Moved "Refactor auth middleware" to "Gardening".');
+  });
+
+  test("assign stamps the task as changed", () => {
+    const result = run({ kind: "assign", target: "auth", cluster: "gardening" }, clustered, NOW, {
+      clusters,
+    });
+
+    expect(result.tasks.find((t) => t.id === "t1")?.updatedAt).toBe(NOW);
+  });
+
+  test("assign can be undone", () => {
+    const result = run({ kind: "assign", target: "auth", cluster: "gardening" }, clustered, NOW, {
+      clusters,
+    });
+
+    expect(result.undo).toBe(clustered);
+  });
+
+  test("assign refuses when the task is already there", () => {
+    const result = run({ kind: "assign", target: "roses", cluster: "gardening" }, clustered, NOW, {
+      clusters,
+    });
+
+    expect(result.message).toContain("already in");
+    expect(result.undo).toBeUndefined();
+  });
+
+  test("assign refuses an unknown cluster without touching the board", () => {
+    const result = run({ kind: "assign", target: "auth", cluster: "atlantis" }, clustered, NOW, {
+      clusters,
+    });
+
+    expect(result.tasks).toBe(clustered);
+    expect(result.message).toContain("No cluster matches");
+  });
+
+  test("a created task lands in the cluster the user is looking at", () => {
+    const result = run({ kind: "create", title: "Book the venue" }, clustered, NOW, {
+      clusters,
+      activeClusterId: "c_2",
+      makeId: () => "t9",
+    });
+
+    expect(result.tasks.find((t) => t.id === "t9")?.clusterId).toBe("c_2");
+  });
+
+  test("listing skips work inside a cluster that has been ethered", () => {
+    const result = run({ kind: "list", filter: "open" }, clustered, NOW, { clusters });
+
+    expect(result.listed?.map((t) => t.id)).toEqual(["t1", "t2"]);
+  });
+
+  test("listing is unchanged when no clusters are supplied", () => {
+    const result = run({ kind: "list", filter: "open" }, clustered, NOW);
+
+    expect(result.listed).toHaveLength(3);
   });
 });

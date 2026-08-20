@@ -54,5 +54,13 @@ export const parse = (text: string): Command => {
     if (to) return { kind: "move", target: moveMatch[1], to };
   }
 
+  const assignMatch = input.match(/^assign\s+(.+?)\s+(?:to|into)\s+(.+)$/);
+  if (assignMatch) {
+    return { kind: "assign", target: assignMatch[1], cluster: assignMatch[2] };
+  }
+
+  const switchMatch = input.match(/^(?:switch|go)\s+(?:to\s+)?(.+)$/);
+  if (switchMatch) return { kind: "switch", target: switchMatch[1] };
+
   return unknown;
 };
