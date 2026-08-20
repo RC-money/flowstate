@@ -23,6 +23,7 @@ import {
   legendSwatches,
 } from "./graphStyles";
 import Starfield from "./Starfield";
+import NovaStar from "../NovaStar";
 import { logEvent } from "../../lib/analytics";
 import { useGraphPhysics, type ForceGraphInstance } from "./graphPhysics";
 import type { Constellation, Tether } from "../../types/celestial";
@@ -72,6 +73,8 @@ export interface GraphPreferences {
   labelMode?: "hover" | "always";
   showStarfield?: boolean;
   autoLock?: boolean;
+  /** Let the camera wander after a long idle. Off unless asked for. */
+  idleDrift?: boolean;
   locked?: boolean;
   preset?: GraphPreset;
   cohesion?: number;
@@ -104,6 +107,8 @@ const COLUMN_TARGETS: Record<"todo" | "inprogress" | "done", { x: number; y: num
 const TAG_CLUSTER_RADIUS = 260;
 const MAX_TAG_CLUSTERS = 5;
 const AUTO_LOCK_DELAY = 2500;
+/** How long the galaxy must sit untouched before the camera starts to wander. */
+const IDLE_DRIFT_DELAY_MS = 30_000;
 const GRAPH_BACKGROUND_TINTS: Record<
   keyof typeof COLUMN_TARGETS,
   { r: number; g: number; b: number; a: number }
@@ -121,6 +126,7 @@ const DEFAULT_GRAPH_PREFS: GraphPreferences = {
   showStarfield: true,
   autoLock: true,
   locked: true,
+  idleDrift: false,
   preset: "planning",
   cohesion: DEFAULT_COHESION,
   spacing: DEFAULT_SPACING,
@@ -533,6 +539,41 @@ const GraphView: React.FC<GraphViewProps> = ({
     [graphData.nodes.length]
   );
 
+  // Entering the galaxy should show the whole galaxy. Without this the camera
+  // keeps whatever zoom and centre the last visit left behind, which lands you
+  // somewhere arbitrary. Waits a beat for warmup ticks to place the nodes.
+  const hasFramedRef = useRef(false);
+  useEffect(() => {
+    if (hasFramedRef.current || graphData.nodes.length === 0) return undefined;
+    const timer = setTimeout(() => {
+      frameGraphToNodes(600, 60);
+      hasFramedRef.current = true;
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [frameGraphToNodes, graphData.nodes.length]);
+
+  // Ambient drift: after a long idle the camera wanders slowly, like a
+  // planetarium left running. Off by default -- motion you did not ask for is
+  // the opposite of what this app is for.
+  useEffect(() => {
+    if (!graphPrefs.idleDrift) return undefined;
+    if (typeof window === "undefined") return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    let phase = 0;
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastInteractionRef.current < IDLE_DRIFT_DELAY_MS) return;
+      const fg = fgRef.current;
+      if (!fg || typeof fg.centerAt !== "function") return;
+      phase += 0.012;
+      // A slow ellipse around wherever the board sits; small enough to read as
+      // drift rather than as the app moving on its own.
+      fg.centerAt(Math.cos(phase) * 90, Math.sin(phase) * 55, 900);
+    }, 900);
+
+    return () => window.clearInterval(timer);
+  }, [graphPrefs.idleDrift]);
+
   const resetLayout = useCallback(() => {
     clearHover();
     clearLayout();
@@ -714,6 +755,8 @@ const GraphView: React.FC<GraphViewProps> = ({
   );
 
   const lastOpenRef = useRef<{ id: string; at: number }>({ id: "", at: 0 });
+  const lastInteractionRef = useRef(Date.now());
+  const lastClickRef = useRef<{ id: string; at: number }>({ id: "", at: 0 });
   const openTaskOnce = useCallback(
     (taskId: string) => {
       // Click and micro-drag can both resolve to an open; fire it once.
@@ -743,7 +786,13 @@ const GraphView: React.FC<GraphViewProps> = ({
         return;
       }
       if (!isNodeVisible(node)) return;
-      openTaskOnce(node.id);
+      // Opening is a double-click. A single click would fight dragging a
+      // planet around, which is the gesture people reach for far more often.
+      const now = Date.now();
+      const isSecondClick =
+        lastClickRef.current.id === node.id && now - lastClickRef.current.at < 350;
+      lastClickRef.current = { id: node.id, at: now };
+      if (isSecondClick) openTaskOnce(node.id);
     },
     [isNodeVisible, openTaskOnce, onCreateTether, projectToViewport, tetherDraft]
   );
@@ -760,6 +809,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   );
 
   const handleCanvasMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    lastInteractionRef.current = Date.now();
     const { clientX, clientY } = event;
     if (typeof window === "undefined") {
       setCursor({ x: clientX, y: clientY });
@@ -1183,9 +1233,11 @@ const GraphView: React.FC<GraphViewProps> = ({
     }
     const maxLeft = window.innerWidth - 280;
     const maxTop = window.innerHeight - 180;
+    // Sits just off the body it describes. Further away and the card reads as
+    // belonging to the canvas rather than to the planet under the cursor.
     return {
-      left: Math.min(maxLeft, Math.max(16, baseX + 16)),
-      top: Math.min(maxTop, Math.max(16, baseY - 16)),
+      left: Math.min(maxLeft, Math.max(16, baseX + 14)),
+      top: Math.min(maxTop, Math.max(16, baseY + 12)),
     };
   }, [cursor, tooltipPosition]);
 
@@ -1307,6 +1359,10 @@ const GraphView: React.FC<GraphViewProps> = ({
               warmupTicks={60}
               backgroundColor="rgba(0,0,0,0)"
               cooldownTicks={0}
+              // Subtask moons orbit on the clock, so the canvas has to keep
+              // painting after the simulation settles -- the default pauses
+              // redraw once nothing moves, which froze them mid-orbit.
+              autoPauseRedraw={false}
               enableZoomInteraction={scrollZoomEnabled}
               linkDirectionalParticles={1}
               linkDirectionalParticleWidth={(link) => {
@@ -1395,6 +1451,29 @@ const GraphView: React.FC<GraphViewProps> = ({
                     ))}
                   </div>
                 ) : null}
+                {hoveredTask?.subtasks && hoveredTask.subtasks.length > 0 ? (
+                  <div className="mt-3 border-t border-white/10 pt-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      {hoveredTask.subtasks.filter((s) => s.done).length} of{" "}
+                      {hoveredTask.subtasks.length} moons
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {hoveredTask.subtasks.slice(0, 5).map((subtask) => (
+                        <li key={subtask.id} className="flex items-center gap-2 text-[12px]">
+                          <NovaStar filled={subtask.done} size={10} />
+                          <span className={subtask.done ? "text-slate-500 line-through" : "text-slate-200"}>
+                            {subtask.title}
+                          </span>
+                        </li>
+                      ))}
+                      {hoveredTask.subtasks.length > 5 ? (
+                        <li className="text-[11px] text-slate-500">
+                          +{hoveredTask.subtasks.length - 5} more
+                        </li>
+                      ) : null}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1428,6 +1507,31 @@ const GraphView: React.FC<GraphViewProps> = ({
             >
               {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
             </button>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => frameGraphToNodes(600, 60)}
+                className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10"
+              >
+                Fit to galaxy
+              </button>
+              <button
+                type="button"
+                aria-pressed={Boolean(graphPrefs.idleDrift)}
+                onClick={() =>
+                  setGraphPrefs((prev) => ({ ...prev, idleDrift: !prev.idleDrift }))
+                }
+                title="After 30s untouched, the camera wanders slowly"
+                className={[
+                  "flex-1 rounded-lg border px-3 py-2 text-[11px] font-medium transition",
+                  graphPrefs.idleDrift
+                    ? "border-white/60 bg-white/10 text-white"
+                    : "border-white/15 text-slate-300 hover:bg-white/10",
+                ].join(" ")}
+              >
+                Idle drift {graphPrefs.idleDrift ? "on" : "off"}
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-[11px] text-slate-200 shadow-inner shadow-black/30">
