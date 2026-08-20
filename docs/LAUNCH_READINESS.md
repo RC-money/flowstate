@@ -43,28 +43,31 @@ release. Everything below is on `main` and `origin/main`.
 - `src/lib/commands/run.ts` -- confirm the gate did not widen. Board operations
   only. No cluster creation, no ethering, no styling, no journal.
 
-## Blocker: the MCP server is not shippable yet
+## The MCP server ships now (was a blocker, fixed 2026-08-20)
 
-Found 2026-08-20 while writing the Connect panel. The headline feature does not
-survive packaging.
+It was unreachable for every buyer: `tauri.conf.json` had no `resources`, so
+`mcp/` was not in the bundle at all, and the server was a dev script anyway --
+`#!/usr/bin/env tsx`, importing `../src/lib/commands`. It only ran from a
+checkout.
 
-- `tauri.conf.json` has **no `resources`**, so `mcp/` is not in the bundle at
-  all. Every path in the Connect panel points at a file the installed app does
-  not have.
-- The server is a dev script, not a distributable: `#!/usr/bin/env tsx`, and it
-  imports `../src/lib/commands` and `../src/hooks/useLocalTasks`. It needs tsx
-  and the whole source tree to run.
+What changed:
 
-The fix is a build step: bundle `mcp/server.ts` and everything it imports into
-one self-contained `mcp/server.js` (esbuild, node platform), ship that via
-`resources`, and have the snippets run it with `node`. `ConnectPanel.tsx` keeps
-the path in a single `SERVER_PATH` constant so there is one place to keep in
-step. Node on the user's machine is a fair assumption for people already
-running Claude Code or Codex, but it is an assumption worth stating on the
-listing.
+- `npm run build:mcp` bundles `mcp/server.ts` and everything it imports into a
+  single `mcp/dist/server.mjs` with esbuild. It runs on plain `node` with no
+  tsx, no source tree and no node_modules.
+- `npm run build` runs it, and Tauri's `beforeBuildCommand` is `npm run build`,
+  so a release cannot be cut without it.
+- `resources` copies it to `Contents/Resources/mcp/server.mjs`, which is
+  exactly the `SERVER_PATH` constant the Connect panel hands out.
 
-Until that lands, the Connect panel is accurate about everything except where
-the file is.
+`.mjs`, not `.js`: node reads a bare `.js` as CommonJS and dies on the first
+import. Verified end to end -- server launched from inside the built `.app`
+with plain `node`, cwd `/`, minimal env: it created a task and listed the
+board with cluster names.
+
+**This assumes Node on the buyer's machine.** Fair for people already running
+AI coding tools, but it belongs on the listing rather than being a surprise at
+setup time.
 
 ## Known gaps, deliberate
 

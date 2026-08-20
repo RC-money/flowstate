@@ -17,9 +17,12 @@ const BOARD_FILE = "~/Library/Application Support/com.flowstate.app/tasks.json";
  * clients exist, and what their config looks like, changes faster than this
  * app will. The assistant reading the prompt knows its own client; we do not.
  *
- * Keep in step with `resources` in tauri.conf.json.
+ * Keep in step with `resources` in tauri.conf.json, which copies the bundled
+ * `mcp/dist/server.mjs` to exactly this place. `.mjs` rather than `.js`
+ * deliberately: node reads a bare `.js` as CommonJS and chokes on the first
+ * import.
  */
-const SERVER_PATH = "/Applications/Flowstate.app/Contents/Resources/mcp/server.js";
+const SERVER_PATH = "/Applications/Flowstate.app/Contents/Resources/mcp/server.mjs";
 
 /**
  * For every assistant that cannot speak MCP but can open a file -- which is

@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run build:mcp",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:mcp": "esbuild mcp/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=mcp/dist/server.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
