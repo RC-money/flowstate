@@ -7,6 +7,7 @@ import {
   type AndromedaPoint,
 } from "../lib/clusters/andromeda";
 import { hash32, unit } from "../lib/hash";
+import andromedaUrl from "../assets/andromeda.jpg";
 import type { Cluster } from "../lib/clusters/clusters";
 
 interface AndromedaViewProps {
@@ -38,6 +39,14 @@ const ROTATION_MS = 110_000;
  * gets a galaxy that fills the space instead of a speck in a wide empty frame.
  */
 const DISC_EXTENT = 1.02;
+
+/**
+ * Half-width the photograph is drawn at. Its disc runs to about 0.95 of the
+ * frame, so this puts the visible galaxy at radius ~1 -- where the cluster
+ * points are placed, which is what makes them land on the arms rather than
+ * beside them.
+ */
+const PHOTO_HALF = 1.06;
 const DEEP_FIELD_EXTENT = 3;
 
 /** Arms drawn, and how far each sweeps. Many, tight, and unevenly lit. */
@@ -170,6 +179,8 @@ export default function AndromedaView({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [adding, setAdding] = useState(startNaming);
+  // Falls back to the drawn galaxy if the file ever goes missing.
+  const [photoOk, setPhotoOk] = useState(true);
   const [newName, setNewName] = useState("");
   const frame = useRef<number | null>(null);
   const pausedRef = useRef(false);
@@ -331,103 +342,143 @@ export default function AndromedaView({
             <filter id="andromeda-companion-soft" x="-60%" y="-60%" width="220%" height="220%">
               <feGaussianBlur stdDeviation="0.012" />
             </filter>
+            {/* The photograph is a square, and a square has corners. Feathered
+                out, it stops being a picture pasted on the page and becomes
+                the sky the panel is looking at. */}
+            <radialGradient id="andromeda-vignette">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+              <stop offset="52%" stopColor="#ffffff" stopOpacity="1" />
+              <stop offset="78%" stopColor="#ffffff" stopOpacity="0.55" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+            </radialGradient>
+            <mask id="andromeda-mask">
+              <rect
+                x={-PHOTO_HALF}
+                y={-PHOTO_HALF}
+                width={PHOTO_HALF * 2}
+                height={PHOTO_HALF * 2}
+                fill="url(#andromeda-vignette)"
+              />
+            </mask>
           </defs>
 
-          {/* Subtle, so the galaxy dominates rather than competes. */}
-          <g opacity={0.7}>
-            {FIELD.map((star, i) => (
-              <circle
-                key={`f${i}`}
-                cx={star.x * extent}
-                cy={star.y * extent}
-                r={star.size}
-                fill={star.color}
-                opacity={star.opacity}
-              />
-            ))}
-          </g>
+          {/* The photograph when it loads, the drawn galaxy when it does
+              not. Still, deliberately: a real photo rotated in two
+              dimensions reads as a spinning plate, not a turning galaxy.
+              The clusters keep orbiting over it, which is the motion that
+              was ever true. */}
+          {photoOk ? (
+            <image
+              href={andromedaUrl}
+              x={-PHOTO_HALF}
+              y={-PHOTO_HALF}
+              width={PHOTO_HALF * 2}
+              height={PHOTO_HALF * 2}
+              preserveAspectRatio="xMidYMid slice"
+              mask="url(#andromeda-mask)"
+              onError={() => setPhotoOk(false)}
+            />
+          ) : (
+            <>
 
-          <g transform={`rotate(${TILT_DEGREES})`}>
-            <ellipse rx={1.5} ry={1.5 * DISC_FLATTEN} fill="url(#andromeda-disc)" />
-          </g>
-
-          {/* The star-filled haze of the disc, built from many faint arms.
-              Blurred, they read as light rather than line work. */}
-          <g filter="url(#andromeda-soft)">
-            {Array.from({ length: DRAWN_ARMS }, (_, arm) => (
-              <path
-                key={`arm-${arm}`}
-                d={armPath(arm, spin)}
-                fill="none"
-                stroke={arm % 5 === 0 ? "#e2e8ff" : "#9fb0dd"}
-                strokeWidth={0.01 + (arm % 3) * 0.004}
-                strokeLinecap="round"
-                opacity={0.08 + (arm % 5) * 0.03}
-              />
-            ))}
-          </g>
-
-          <g filter="url(#andromeda-soft)">
-            {DUST.map((speck, i) => {
-              const flat = {
-                x: Math.cos(speck.angle) * speck.radius,
-                y: Math.sin(speck.angle) * speck.radius,
-              };
-              const { x, y } = projectToDisc(flat, spin);
-              return (
+            {/* Subtle, so the galaxy dominates rather than competes. */}
+            <g opacity={0.7}>
+              {FIELD.map((star, i) => (
                 <circle
-                  key={i}
-                  cx={x}
-                  cy={y}
-                  r={speck.size}
-                  fill={speck.color}
-                  opacity={speck.opacity}
+                  key={`f${i}`}
+                  cx={star.x * extent}
+                  cy={star.y * extent}
+                  r={star.size}
+                  fill={star.color}
+                  opacity={star.opacity}
                 />
-              );
-            })}
-          </g>
+              ))}
+            </g>
 
-          {/* Arcs, not rings. A closed ellipse reads as an outline drawn round
-              the galaxy; a band that starts and stops reads as dust passing in
-              front of the bulge, which is what it is. */}
-          <g transform={`rotate(${TILT_DEGREES})`} filter="url(#andromeda-lane)">
-            {DUST_LANES.map((lane, i) => (
-              <path
-                key={`lane-${i}`}
-                d={laneArc(lane)}
-                fill="none"
-                stroke="#241a12"
-                strokeWidth={lane.width}
-                strokeLinecap="round"
-                opacity={lane.opacity}
+            <g transform={`rotate(${TILT_DEGREES})`}>
+              <ellipse rx={1.5} ry={1.5 * DISC_FLATTEN} fill="url(#andromeda-disc)" />
+            </g>
+
+            {/* The star-filled haze of the disc, built from many faint arms.
+                Blurred, they read as light rather than line work. */}
+            <g filter="url(#andromeda-soft)">
+              {Array.from({ length: DRAWN_ARMS }, (_, arm) => (
+                <path
+                  key={`arm-${arm}`}
+                  d={armPath(arm, spin)}
+                  fill="none"
+                  stroke={arm % 5 === 0 ? "#e2e8ff" : "#9fb0dd"}
+                  strokeWidth={0.01 + (arm % 3) * 0.004}
+                  strokeLinecap="round"
+                  opacity={0.08 + (arm % 5) * 0.03}
+                />
+              ))}
+            </g>
+
+            <g filter="url(#andromeda-soft)">
+              {DUST.map((speck, i) => {
+                const flat = {
+                  x: Math.cos(speck.angle) * speck.radius,
+                  y: Math.sin(speck.angle) * speck.radius,
+                };
+                const { x, y } = projectToDisc(flat, spin);
+                return (
+                  <circle
+                    key={i}
+                    cx={x}
+                    cy={y}
+                    r={speck.size}
+                    fill={speck.color}
+                    opacity={speck.opacity}
+                  />
+                );
+              })}
+            </g>
+
+            {/* Arcs, not rings. A closed ellipse reads as an outline drawn round
+                the galaxy; a band that starts and stops reads as dust passing in
+                front of the bulge, which is what it is. */}
+            <g transform={`rotate(${TILT_DEGREES})`} filter="url(#andromeda-lane)">
+              {DUST_LANES.map((lane, i) => (
+                <path
+                  key={`lane-${i}`}
+                  d={laneArc(lane)}
+                  fill="none"
+                  stroke="#241a12"
+                  strokeWidth={lane.width}
+                  strokeLinecap="round"
+                  opacity={lane.opacity}
+                />
+              ))}
+            </g>
+
+            <g transform={`rotate(${TILT_DEGREES})`}>
+              <ellipse rx={0.54} ry={0.54 * DISC_FLATTEN * 1.7} fill="url(#andromeda-bulge)" />
+              <ellipse rx={0.15} ry={0.15 * DISC_FLATTEN * 2.4} fill="url(#andromeda-nucleus)" />
+            </g>
+
+            {/* M32 and M110. Nothing else says Andromeda as quickly. */}
+            <g filter="url(#andromeda-companion-soft)">
+              <ellipse
+                cx={0.72}
+                cy={-0.66}
+                rx={0.075}
+                ry={0.06}
+                fill="url(#andromeda-companion)"
               />
-            ))}
-          </g>
+              <ellipse
+                cx={-0.86}
+                cy={0.52}
+                rx={0.15}
+                ry={0.085}
+                transform="rotate(-18 -0.86 0.52)"
+                fill="url(#andromeda-companion)"
+                opacity={0.72}
+              />
+            </g>
 
-          <g transform={`rotate(${TILT_DEGREES})`}>
-            <ellipse rx={0.54} ry={0.54 * DISC_FLATTEN * 1.7} fill="url(#andromeda-bulge)" />
-            <ellipse rx={0.15} ry={0.15 * DISC_FLATTEN * 2.4} fill="url(#andromeda-nucleus)" />
-          </g>
-
-          {/* M32 and M110. Nothing else says Andromeda as quickly. */}
-          <g filter="url(#andromeda-companion-soft)">
-            <ellipse
-              cx={0.72}
-              cy={-0.66}
-              rx={0.075}
-              ry={0.06}
-              fill="url(#andromeda-companion)"
-            />
-            <ellipse
-              cx={-0.86}
-              cy={0.52}
-              rx={0.15}
-              ry={0.085}
-              transform="rotate(-18 -0.86 0.52)"
-              fill="url(#andromeda-companion)"
-              opacity={0.72}
-            />
-          </g>
+            </>
+          )}
 
           {shown.map(renderPoint)}
         </svg>
