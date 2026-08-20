@@ -18,7 +18,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "../src/lib/commands";
 import type { Command } from "../src/lib/commands";
-import { coerceTasks, type Task, type TaskStatus } from "../src/hooks/useLocalTasks";
+import { normalizeBoard, type Board } from "../src/lib/clusters/board";
+import { liveClusters, nextActiveClusterId } from "../src/lib/clusters/clusters";
+import type { Task } from "../src/hooks/useLocalTasks";
 
 const dataFile = (): string => {
   if (process.env.FLOWSTATE_DATA) return process.env.FLOWSTATE_DATA;
@@ -35,22 +37,41 @@ const dataFile = (): string => {
 
 const FILE = dataFile();
 
-const loadBoard = async (): Promise<Task[]> => {
+/**
+ * The whole board, in whichever shape the file is written in.
+ *
+ * `normalizeBoard` accepts both the bare array every pre-clusters board used
+ * and the `{ clusters, tasks }` object the app writes now, so an older file is
+ * read rather than mistaken for an empty board.
+ */
+const loadBoard = async (): Promise<Board> => {
   try {
     const raw = await readFile(FILE, "utf8");
-    return coerceTasks(JSON.parse(raw)) ?? [];
+    return normalizeBoard(JSON.parse(raw), Date.now()) ?? { clusters: [], tasks: [] };
   } catch {
-    return [];
+    return { clusters: [], tasks: [] };
   }
 };
 
-const saveBoard = async (tasks: Task[]): Promise<void> => {
+/**
+ * Writes the whole board back, clusters included. Writing only the tasks --
+ * which an earlier version of this file did -- silently deleted every cluster
+ * the moment an assistant touched anything.
+ */
+const saveBoard = async (board: Board): Promise<void> => {
   await mkdir(dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(tasks, null, 2), "utf8");
+  await writeFile(FILE, JSON.stringify(board, null, 2), "utf8");
 };
 
-/** One level of undo, in memory, per session. */
-let lastUndo: Task[] | null = null;
+/** One level of undo, in memory, per session. The whole board, not just its
+ * tasks -- reverting to a bare task list would drop the clusters. */
+let lastUndo: Board | null = null;
+
+/**
+ * Which cluster this session is working in. No window to read it from, so it
+ * defaults to the oldest live one and moves when `flow_switch` says so.
+ */
+let activeClusterId: string | null = null;
 
 /**
  * All board operations run through this queue. MCP clients may pipeline
@@ -64,31 +85,47 @@ const serialized = <T>(work: () => Promise<T>): Promise<T> => {
   return next;
 };
 
-const brief = (task: Task) => ({
+const brief = (task: Task, board?: Board) => ({
   title: task.title,
   status: task.status,
+  ...(board && task.clusterId
+    ? { cluster: board.clusters.find((c) => c.id === task.clusterId)?.name }
+    : {}),
   ...(task.dueDate ? { dueDate: task.dueDate } : {}),
   ...(task.tags?.length ? { tags: task.tags } : {}),
   ...(task.darkForest ? { darkForest: true } : {}),
 });
 
 const executeCommand = (command: Command) => serialized(async () => {
-  const tasks = await loadBoard();
-  const result = run(command, tasks, Date.now());
+  const board = await loadBoard();
+  activeClusterId = nextActiveClusterId(board.clusters, activeClusterId);
+  const result = run(command, board.tasks, Date.now(), {
+    clusters: board.clusters,
+    ...(activeClusterId ? { activeClusterId } : {}),
+  });
   if (result.undo) {
-    await saveBoard(result.tasks);
-    lastUndo = result.undo;
+    await saveBoard({ clusters: board.clusters, tasks: result.tasks });
+    lastUndo = { clusters: board.clusters, tasks: result.undo };
   }
+  // `switch` changes nothing on the board; it reports where to work next.
+  if (result.activeClusterId) activeClusterId = result.activeClusterId;
   const payload = {
     message: result.message,
-    ...(result.listed ? { tasks: result.listed.map(brief) } : {}),
+    ...(result.listed ? { tasks: result.listed.map((task) => brief(task, board)) } : {}),
   };
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
 });
 
 const server = new McpServer({ name: "flowstate", version: "0.1.0" });
 
-const STATUS = z.enum(["TO-DO", "IN PROGRESS", "DONE"]);
+/**
+ * A column name, not one of three fixed statuses. Boards make their own
+ * columns now, and an enum here made every custom column unreachable from an
+ * assistant. `run` refuses a column the board does not have.
+ */
+const COLUMN = z
+  .string()
+  .describe("The column to move it to, by name -- whatever this board calls it");
 
 server.tool(
   "flow_list",
@@ -100,8 +137,8 @@ server.tool(
 server.tool(
   "flow_move",
   "Move a task to a status. Describe the task in words; Flowstate resolves which task you mean and refuses if ambiguous.",
-  { target: z.string().describe("The task, in your words"), to: STATUS },
-  async ({ target, to }) => executeCommand({ kind: "move", target, to: to as TaskStatus })
+  { target: z.string().describe("The task, in your words"), to: COLUMN },
+  async ({ target, to }) => executeCommand({ kind: "move", target, to })
 );
 
 server.tool(
@@ -109,6 +146,42 @@ server.tool(
   "Add a new task to the board (always lands in TO-DO).",
   { title: z.string() },
   async ({ title }) => executeCommand({ kind: "create", title })
+);
+
+server.tool(
+  "flow_clusters",
+  "List the projects (clusters) on this board, and say which one you are working in. Each has its own columns.",
+  {},
+  async () => serialized(async () => {
+    const board = await loadBoard();
+    activeClusterId = nextActiveClusterId(board.clusters, activeClusterId);
+    const payload = {
+      working_in: board.clusters.find((c) => c.id === activeClusterId)?.name ?? null,
+      clusters: liveClusters(board.clusters).map((cluster) => ({
+        name: cluster.name,
+        columns: cluster.columns.map((column) => column.name),
+        tasks: board.tasks.filter((task) => task.clusterId === cluster.id).length,
+      })),
+    };
+    return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
+  })
+);
+
+server.tool(
+  "flow_switch",
+  "Work in a different cluster. Everything after this -- adding, listing, moving -- happens there.",
+  { target: z.string().describe("The cluster, in your words") },
+  async ({ target }) => executeCommand({ kind: "switch", target })
+);
+
+server.tool(
+  "flow_assign",
+  "Move a task into a different cluster.",
+  {
+    target: z.string().describe("The task, in your words"),
+    cluster: z.string().describe("The cluster to move it into"),
+  },
+  async ({ target, cluster }) => executeCommand({ kind: "assign", target, cluster })
 );
 
 server.tool(
