@@ -4,7 +4,10 @@ import {
   SKINS,
   STATUS_KEYS,
   skinById,
+  SUNS,
+  sunById,
   type SkinId,
+  type SunId,
 } from "../lib/celestialPrefs";
 import NovaStar from "./NovaStar";
 
@@ -105,6 +108,44 @@ const CelestialPanel = () => {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+            The sun
+          </p>
+          <span className="text-[10px] uppercase tracking-wide text-slate-500">
+            {sunById(prefs.sun).label}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          What burns at the centre in Helios.
+        </p>
+        <div role="group" aria-label="Sun" className="mt-2 flex flex-wrap gap-1.5">
+          {SUNS.map((sun) => {
+            const selected = sun.id === prefs.sun;
+            return (
+              <button
+                key={sun.id}
+                type="button"
+                title={sun.label}
+                aria-label={sun.label}
+                aria-pressed={selected}
+                onClick={() => setPrefs({ ...prefs, sun: sun.id as SunId })}
+                className={[
+                  "h-6 w-6 rounded-full border transition",
+                  selected
+                    ? "border-white/80 ring-2 ring-white/30"
+                    : "border-white/15 hover:border-white/50",
+                ].join(" ")}
+                style={{
+                  background: `radial-gradient(circle at 35% 35%, #ffffff 0%, ${sun.glow} 55%, ${sun.glow}00 100%), ${sun.glow}`,
+                }}
+              />
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-5 border-t border-white/10 pt-4">

@@ -13,4 +13,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  test: {
+    // Agent worktrees live under .claude/ and carry their own copy of the
+    // suite. Without this the runner counts them too, so a green run reports
+    // hundreds of tests that are not this checkout's and would stay green even
+    // if this one broke.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],
+  },
 });

@@ -1,5 +1,11 @@
 import type { Task } from "../../App";
-import sunUrl from "../../assets/planets/sun.png";
+import solUrl from "../../assets/suns/sol.png";
+import coronaUrl from "../../assets/suns/corona.png";
+import furnaceUrl from "../../assets/suns/furnace.png";
+import cinderUrl from "../../assets/suns/cinder.png";
+import alabasterUrl from "../../assets/suns/alabaster.png";
+import frostUrl from "../../assets/suns/frost.png";
+import sapphireUrl from "../../assets/suns/sapphire.png";
 import moon0 from "../../assets/moons/moon0.png";
 import moon1 from "../../assets/moons/moon1.png";
 import moon2 from "../../assets/moons/moon2.png";
@@ -26,8 +32,22 @@ const MOON_SPRITES: Array<HTMLImageElement | null> = [
  * Every body a column can fly. Moons double as planets -- at planet scale they
  * read as small dense worlds, which is exactly what a moon portrait is.
  */
-/** The HELIOS sun, rendered from the source GLB at 256px like the planets. */
-export const SUN_SPRITE: HTMLImageElement | null = loadSprite(sunUrl);
+/**
+ * The stars HELIOS can burn. Sol is rendered from the source GLB at 256px like
+ * the planets; the rest are portraits at the same size.
+ */
+const SUN_SPRITES: Record<SunId, HTMLImageElement | null> = {
+  sol: loadSprite(solUrl),
+  corona: loadSprite(coronaUrl),
+  furnace: loadSprite(furnaceUrl),
+  cinder: loadSprite(cinderUrl),
+  alabaster: loadSprite(alabasterUrl),
+  frost: loadSprite(frostUrl),
+  sapphire: loadSprite(sapphireUrl),
+};
+
+export const sunSpriteFor = (id: SunId): HTMLImageElement | null =>
+  SUN_SPRITES[id] ?? SUN_SPRITES.sol;
 
 const SKIN_SPRITES: Record<SkinId, HTMLImageElement | null> = {
   moon0: MOON_SPRITES[0],
@@ -75,6 +95,7 @@ import {
   skinById,
   type SkinId,
   type StatusKey,
+  type SunId,
 } from "../../lib/celestialPrefs";
 import { rotatePoint, IDENTITY_ROTATION, type ViewRotation } from "../../lib/viewRotation";
 import {
