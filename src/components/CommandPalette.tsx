@@ -10,6 +10,8 @@ export type Command = {
   id: string;
   label: string;
   hint?: string;
+  /** Groups the entry under a heading. Ungrouped entries lead the list. */
+  section?: string;
   run: () => void;
 };
 
@@ -23,7 +25,11 @@ interface CommandPaletteProps {
 const filterCommands = (commands: Command[], query: string): Command[] => {
   if (!query) return commands;
   const normalized = query.toLowerCase();
-  return commands.filter((cmd) => cmd.label.toLowerCase().includes(normalized));
+  return commands.filter(
+    (cmd) =>
+      cmd.label.toLowerCase().includes(normalized) ||
+      (cmd.section ?? "").toLowerCase().includes(normalized)
+  );
 };
 
 const useGlobalShortcut = (handler: () => void) => {
@@ -189,8 +195,20 @@ export default function CommandPalette({
             <ul className="space-y-1">
               {filtered.map((cmd, index) => {
                 const isActive = index === highlighted;
+                // A heading appears the first time a section shows up, so the
+                // list reads as sections without needing a nested structure --
+                // filtering still walks one flat array.
+                const heading =
+                  cmd.section && cmd.section !== filtered[index - 1]?.section
+                    ? cmd.section
+                    : null;
                 return (
                   <li key={cmd.id}>
+                    {heading ? (
+                      <p className="px-3 pb-1 pt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        {heading}
+                      </p>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleCommand(cmd)}

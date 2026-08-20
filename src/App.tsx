@@ -135,6 +135,18 @@ const isTaskPayload = (item: unknown): item is Task => {
   );
 };
 
+/**
+ * Asks a component to open one of its naming fields, on the frame after the
+ * palette has finished closing. Dispatched immediately, the palette's own focus
+ * restoration lands on the fresh field and blurs it, and a field that commits
+ * on blur closes before anyone can type in it.
+ */
+const openAfterPalette = (event: string, detail?: Record<string, string>): void => {
+  requestAnimationFrame(() => {
+    window.dispatchEvent(new CustomEvent(event, detail ? { detail } : undefined));
+  });
+};
+
 const sanitizeTasks = (data: unknown): Task[] | null => {
   if (!Array.isArray(data)) return null;
   const cleaned = data.filter(isTaskPayload);
@@ -763,26 +775,6 @@ function AppShell() {
         },
       },
       {
-        id: "cmd-new-cluster",
-        label: "New Cluster",
-        hint: "C",
-        run: () => {
-          logEvent({ type: "palette:run" });
-          // The switcher owns the naming field; the palette just opens it, so
-          // there is one place a cluster gets named however you got there.
-          window.dispatchEvent(new CustomEvent("flowstate:new-cluster"));
-        },
-      },
-      {
-        id: "cmd-new-column",
-        label: "New Column",
-        hint: "L",
-        run: () => {
-          logEvent({ type: "palette:run" });
-          window.dispatchEvent(new CustomEvent("flowstate:new-column"));
-        },
-      },
-      {
         id: "cmd-observatory",
         label: "Open Observatory",
         hint: "O",
@@ -831,8 +823,93 @@ function AppShell() {
           importInputRef.current?.click();
         },
       },
+
+      // Shaping the board lives here rather than on it. The board stays cards
+      // and columns; everything that rearranges them is one keystroke away and
+      // filters as you type, which is what keeps a fifty-column board sane.
+      {
+        id: "cmd-new-cluster",
+        label: "New cluster",
+        section: "Clusters",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          // The switcher owns the naming field; the palette only opens it, so a
+          // cluster is named in one place however you got there. Deferred a
+          // frame: the palette is still closing, and the focus it hands back
+          // would blur the new field the moment it appeared.
+          openAfterPalette("flowstate:new-cluster");
+        },
+      },
+      ...liveClusterList
+        .filter((cluster) => cluster.id !== activeClusterId)
+        .map((cluster, index) => ({
+          id: `cmd-switch-${cluster.id}`,
+          label: `Switch to ${cluster.name}`,
+          section: "Clusters",
+          hint: index < 9 ? `⌘${index + 1}` : undefined,
+          run: () => {
+            logEvent({ type: "palette:run" });
+            setActiveClusterId(cluster.id);
+          },
+        })),
+      ...(activeCanEther && activeCluster
+        ? [
+            {
+              id: "cmd-ether-cluster",
+              label: `Send ${activeCluster.name} to the ether`,
+              section: "Clusters",
+              run: () => {
+                logEvent({ type: "palette:run" });
+                handleEtherCluster();
+              },
+            },
+          ]
+        : []),
+
+      {
+        id: "cmd-new-column",
+        label: "New column",
+        section: "Columns",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          openAfterPalette("flowstate:new-column");
+        },
+      },
+      ...activeColumns.map((column) => ({
+        id: `cmd-rename-col-${column.id}`,
+        label: `Rename column: ${column.name}`,
+        section: "Columns",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          openAfterPalette("flowstate:rename-column", { id: column.id });
+        },
+      })),
+      ...(activeColumns.length > 1
+        ? activeColumns.map((column) => ({
+            id: `cmd-remove-col-${column.id}`,
+            label: `Remove column: ${column.name}`,
+            section: "Columns",
+            run: () => {
+              logEvent({ type: "palette:run" });
+              handleRemoveColumn(column.id);
+            },
+          }))
+        : []),
     ],
-    [focusedColumn, handleAddTask, handleExportTasks, darkForestTasks, handleRestoreFromDarkForest]
+    [
+      focusedColumn,
+      handleAddTask,
+      handleExportTasks,
+      darkForestTasks,
+      handleRestoreFromDarkForest,
+      liveClusterList,
+      activeClusterId,
+      activeCluster,
+      activeCanEther,
+      activeColumns,
+      handleEtherCluster,
+      handleRemoveColumn,
+    ]
   );
 
   const handlePaletteOpen = useCallback(() => {
@@ -947,7 +1024,6 @@ function AppShell() {
                 onMoveTask={(taskId, next) => handleMoveTask(taskId, next, "menu")}
                 onAddColumn={handleAddColumn}
                 onRenameColumn={handleRenameColumn}
-                onRemoveColumn={handleRemoveColumn}
               />
               <DragOverlay
                 dropAnimation={{ duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }}

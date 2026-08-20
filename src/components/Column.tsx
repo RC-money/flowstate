@@ -11,9 +11,8 @@ type Props = {
   title: string;
   /** Position on the board, which is what picks its colour. */
   index: number;
-  /** Rename and remove are only offered where a column can be edited. */
+  /** Renaming happens in place; the palette is what asks for it. */
   onRename?: (id: string, name: string) => void;
-  onRemove?: (id: string) => void;
   cards: Task[];
   onCardClick: (t: Task) => void;
   onAdd?: (status: Status) => void;
@@ -31,10 +30,20 @@ export default function Column({
   openTask,
   titleById,
   onRename,
-  onRemove,
 }: Props) {
   const [renaming, setRenaming] = React.useState(false);
   const [draft, setDraft] = React.useState(title);
+
+  // "Rename column: In Progress" in the palette opens this column's own field.
+  React.useEffect(() => {
+    const open = (event: Event) => {
+      if ((event as CustomEvent<{ id: string }>).detail?.id !== id) return;
+      setDraft(title);
+      setRenaming(true);
+    };
+    window.addEventListener("flowstate:rename-column", open);
+    return () => window.removeEventListener("flowstate:rename-column", open);
+  }, [id, title]);
   const { setNodeRef, isOver } = useDroppable({ id });
   const [prefs] = useCelestialPrefs();
 
@@ -117,17 +126,6 @@ export default function Column({
               {title}
             </h3>
           )}
-          {onRemove ? (
-            <button
-              type="button"
-              onClick={() => onRemove(id)}
-              aria-label={`Remove ${title}`}
-              title={`Remove ${title}`}
-              className="shrink-0 rounded-md px-1.5 text-[13px] leading-none text-[#4d587a] transition hover:text-[#c9d0ff]"
-            >
-              &times;
-            </button>
-          ) : null}
         </div>
         <div className="mt-2 h-[3px] w-28 rounded" style={{ background: rule }} />
         <p className="mt-1.5 font-mono text-[11px] tabular-nums text-[#6b7799]">

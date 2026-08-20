@@ -16,7 +16,6 @@ interface BoardProps {
   onAddTask?: () => void;
   onAddColumn?: (name: string) => void;
   onRenameColumn?: (id: string, name: string) => void;
-  onRemoveColumn?: (id: string) => void;
 }
 
 export default function Board({
@@ -29,7 +28,6 @@ export default function Board({
   onAddTask,
   onAddColumn,
   onRenameColumn,
-  onRemoveColumn,
 }: BoardProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -117,40 +115,31 @@ export default function Board({
             onAdd={onAdd}
             openTask={onOpenTask}
             onRename={onRenameColumn}
-            onRemove={columns.length > 1 ? onRemoveColumn : undefined}
           />
         </div>
       ))}
 
-      {onAddColumn && columns.length < MAX_COLUMNS ? (
+      {/* No standing button: shaping the board is a palette command, so the
+          board itself stays cards and columns. The field only appears once
+          ⌘K has asked for a column. */}
+      {namingColumn && onAddColumn && columns.length < MAX_COLUMNS ? (
         <div className="w-[150px] shrink-0 pt-1">
-          {namingColumn ? (
-            <input
-              autoFocus
-              value={columnDraft}
-              onChange={(event) => setColumnDraft(event.target.value)}
-              onBlur={commitColumn}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") commitColumn();
-                if (event.key === "Escape") {
-                  setColumnDraft("");
-                  setNamingColumn(false);
-                }
-              }}
-              placeholder="Name it"
-              aria-label="Name the new column"
-              className="w-full rounded-xl border border-[rgba(165,175,255,0.2)] bg-[rgba(165,175,255,0.06)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.09em] text-white outline-none placeholder:text-[#6b7799]"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNamingColumn(true)}
-              aria-label="Add column"
-              className="w-full rounded-xl border border-dashed border-[rgba(165,175,255,0.14)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.09em] text-[#6b7799] transition hover:border-[rgba(165,175,255,0.4)] hover:text-[#c9d0ff]"
-            >
-              + Column
-            </button>
-          )}
+          <input
+            autoFocus
+            value={columnDraft}
+            onChange={(event) => setColumnDraft(event.target.value)}
+            onBlur={commitColumn}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitColumn();
+              if (event.key === "Escape") {
+                setColumnDraft("");
+                setNamingColumn(false);
+              }
+            }}
+            placeholder="Name it"
+            aria-label="Name the new column"
+            className="w-full rounded-xl border border-[rgba(165,175,255,0.2)] bg-[rgba(165,175,255,0.06)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.09em] text-white outline-none placeholder:text-[#6b7799]"
+          />
         </div>
       ) : null}
     </div>
