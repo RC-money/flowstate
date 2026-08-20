@@ -255,38 +255,39 @@ export default function AndromedaView({
             and hunting a six-pixel dot is not the feeling here. */}
         <circle r={Math.max(radius * 4, 0.1)} fill="transparent" />
         <circle
-          r={radius * (isHovered || isActive ? 3.4 : 2.4)}
-          fill={point.ethered ? "#c9d0ff" : "#ffffff"}
-          opacity={point.brightness * 0.2}
-        />
-        <circle
-          r={radius}
-          fill={point.ethered ? "#c9d0ff" : "#ffffff"}
-          opacity={Math.min(1, point.brightness + 0.15)}
+          r={radius * (isHovered || isActive ? 5.2 : 4)}
+          fill="url(#andromeda-knot)"
+          opacity={point.brightness * (isHovered || isActive ? 1 : 0.75)}
         />
         {isActive ? (
           <circle
-            r={radius * 3.2}
+            r={radius * 3.6}
             fill="none"
-            stroke="#7c83ff"
-            strokeWidth={0.009}
-            opacity={0.95}
+            stroke="#a5afff"
+            strokeWidth={0.007}
+            opacity={0.75}
           />
         ) : null}
-        {isHovered || isActive ? (
-          <text
-            y={radius * 3.4 + 0.085}
-            textAnchor="middle"
-            fill={point.ethered ? "#9aa6c4" : "#e7ebff"}
-            style={{
-              fontSize: 0.075,
-              fontFamily: "ui-monospace, monospace",
-              letterSpacing: 0.004,
-            }}
-          >
-            {point.ethered ? point.catalog : point.name}
-          </text>
-        ) : null}
+        {/* Always named. Three unlabelled lights on a photograph of a
+            hundred billion of them is not a map. Stroked in the background
+            colour first, so a name stays readable across the bright bulge. */}
+        <text
+          y={radius * 4.6 + 0.075}
+          textAnchor="middle"
+          fill={point.ethered ? "#a7b2cc" : "#eef1ff"}
+          opacity={isHovered || isActive ? 1 : 0.82}
+          stroke="#04060f"
+          strokeWidth={0.02}
+          paintOrder="stroke"
+          strokeLinejoin="round"
+          style={{
+            fontSize: 0.062,
+            fontFamily: "ui-monospace, monospace",
+            letterSpacing: 0.004,
+          }}
+        >
+          {point.ethered ? point.catalog : point.name}
+        </text>
       </g>
     );
   };
@@ -327,6 +328,15 @@ export default function AndromedaView({
               <stop offset="68%" stopColor="#93a6cd" stopOpacity="0.17" />
               <stop offset="90%" stopColor="#7186b4" stopOpacity="0.08" />
               <stop offset="100%" stopColor="#5d719c" stopOpacity="0" />
+            </radialGradient>
+            {/* A cluster reads as a bright knot in the disc, not a disc laid
+                on top of it: no hard edge, warm at the centre, falling away
+                into the photograph. */}
+            <radialGradient id="andromeda-knot">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+              <stop offset="18%" stopColor="#fff6e6" stopOpacity="0.85" />
+              <stop offset="45%" stopColor="#cfd8ff" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="#9fb2ff" stopOpacity="0" />
             </radialGradient>
             <radialGradient id="andromeda-companion">
               <stop offset="0%" stopColor="#fffaf0" stopOpacity="0.95" />
