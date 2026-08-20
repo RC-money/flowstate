@@ -37,7 +37,7 @@ const ROTATION_MS = 110_000;
  * the extra is only for the deep field, so a board with nothing ethered yet
  * gets a galaxy that fills the space instead of a speck in a wide empty frame.
  */
-const DISC_EXTENT = 1.35;
+const DISC_EXTENT = 1.02;
 const DEEP_FIELD_EXTENT = 3;
 
 /** Arms drawn, and how far each sweeps. Many, tight, and unevenly lit. */

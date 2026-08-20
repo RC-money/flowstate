@@ -182,10 +182,15 @@ export const andromedaPoints = (
       };
     }
 
-    const slot = armSlot(cluster.id);
+    // Radius is staggered by position as well as hashed, so three clusters
+    // spread from the core to the rim instead of landing in one huddle.
+    const order = liveOrder.get(cluster.id) ?? 0;
+    const liveTotal = Math.max(1, liveOrder.size);
+    const band = 0.42 + (order / liveTotal) * 0.5;
+    const jitter = (armSlot(cluster.id).radius - 0.65) * 0.16;
     const { x, y } = spiralPoint({
-      arm: (liveOrder.get(cluster.id) ?? 0) % ANDROMEDA_ARMS,
-      radius: slot.radius,
+      arm: order % ANDROMEDA_ARMS,
+      radius: Math.min(1, Math.max(0.35, band + jitter)),
     });
     // The same curve a neglected task follows, one level up.
     const decay = decayLevel(touched, now);
