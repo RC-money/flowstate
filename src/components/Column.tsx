@@ -4,10 +4,16 @@ import type { Status, Task } from "../App";
 import Card from "./Card";
 import { useCelestialPrefs } from "../hooks/useCelestialPrefs";
 import { accentForStatus } from "../lib/celestialPrefs";
+import { columnPalette } from "../lib/columns/palette";
 
 type Props = {
-  id: Status;           // "TO-DO" | "IN PROGRESS" | "DONE"
+  id: Status;           // a column id -- one of the defaults, or one the user made
   title: string;
+  /** Position on the board, which is what picks its colour. */
+  index: number;
+  /** Rename and remove are only offered where a column can be edited. */
+  onRename?: (id: string, name: string) => void;
+  onRemove?: (id: string) => void;
   cards: Task[];
   onCardClick: (t: Task) => void;
   onAdd?: (status: Status) => void;
@@ -18,12 +24,17 @@ type Props = {
 export default function Column({
   id,
   title,
+  index,
   cards,
   onCardClick,
   onAdd,
   openTask,
   titleById,
+  onRename,
+  onRemove,
 }: Props) {
+  const [renaming, setRenaming] = React.useState(false);
+  const [draft, setDraft] = React.useState(title);
   const { setNodeRef, isOver } = useDroppable({ id });
   const [prefs] = useCelestialPrefs();
 
@@ -35,8 +46,18 @@ export default function Column({
     }
   };
 
-  // The column wears whatever body it flies in the galaxy.
-  const accent = accentForStatus(prefs, id);
+  // The column wears whatever body it flies in the galaxy. A column the user
+  // added has no body assigned, so it falls back to its position's hue.
+  const accent = prefs.statusSkins[id]
+    ? accentForStatus(prefs, id)
+    : columnPalette(index).core;
+  const { hues } = columnPalette(index);
+  // Past seven columns a hue is shared, so the rule becomes the gradient of the
+  // whole combination -- that is what keeps the fiftieth column distinguishable.
+  const rule =
+    hues.length > 1
+      ? `linear-gradient(90deg, ${hues.join(", ")}, transparent)`
+      : `linear-gradient(90deg, ${accent}, transparent)`;
 
   return (
     <section
@@ -58,16 +79,57 @@ export default function Column({
       }}
     >
       <header className="mb-3.5">
-        <h3
-          className="font-mono text-xs font-bold uppercase tracking-[0.16em]"
-          style={{ color: accent }}
-        >
-          {title}
-        </h3>
-        <div
-          className="mt-2 h-[3px] w-28 rounded"
-          style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }}
-        />
+        <div className="flex items-start justify-between gap-2">
+          {renaming && onRename ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onBlur={() => {
+                onRename(id, draft);
+                setRenaming(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  onRename(id, draft);
+                  setRenaming(false);
+                }
+                if (event.key === "Escape") {
+                  setDraft(title);
+                  setRenaming(false);
+                }
+              }}
+              aria-label={`Rename ${title}`}
+              className="w-full bg-transparent font-mono text-xs font-bold uppercase tracking-[0.16em] outline-none"
+              style={{ color: accent }}
+            />
+          ) : (
+            <h3
+              className="font-mono text-xs font-bold uppercase tracking-[0.16em]"
+              style={{ color: accent }}
+              onDoubleClick={() => {
+                if (!onRename) return;
+                setDraft(title);
+                setRenaming(true);
+              }}
+              title={onRename ? "Double-click to rename" : undefined}
+            >
+              {title}
+            </h3>
+          )}
+          {onRemove ? (
+            <button
+              type="button"
+              onClick={() => onRemove(id)}
+              aria-label={`Remove ${title}`}
+              title={`Remove ${title}`}
+              className="shrink-0 rounded-md px-1.5 text-[13px] leading-none text-[#4d587a] transition hover:text-[#c9d0ff]"
+            >
+              &times;
+            </button>
+          ) : null}
+        </div>
+        <div className="mt-2 h-[3px] w-28 rounded" style={{ background: rule }} />
         <p className="mt-1.5 font-mono text-[11px] tabular-nums text-[#6b7799]">
           {cards.length} {cards.length === 1 ? "task" : "tasks"}
         </p>

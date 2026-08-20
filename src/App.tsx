@@ -61,7 +61,15 @@ import {
   tasksInCluster,
 } from "./lib/clusters/clusters";
 import ClusterSwitcher from "./components/ClusterSwitcher";
-import { DEFAULT_COLUMNS } from "./lib/columns/columns";
+import {
+  DEFAULT_COLUMNS,
+  addColumn,
+  isTerminal,
+  removeColumn,
+  renameColumn,
+  terminalColumnId,
+  type Column,
+} from "./lib/columns/columns";
 import { stampCompletion } from "./lib/earnedStars";
 import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
@@ -368,7 +376,7 @@ function AppShell() {
   const handleSendToEther = useCallback(
     (taskId: string) => {
       const task = tasksById[taskId];
-      if (!task || task.status !== "DONE") return;
+      if (!task || !isTerminal(activeColumns, task.status)) return;
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? touchTask({ ...t, etheredAt: Date.now() }) : t))
       );
@@ -418,7 +426,7 @@ function AppShell() {
       appendLogEvent({
         t: Date.now(),
         taskId,
-        kind: nextStatus === "DONE" ? "completed" : "moved",
+        kind: isTerminal(activeColumns, nextStatus) ? "completed" : "moved",
         from: current.status,
         to: nextStatus,
         title: current.title,
@@ -463,13 +471,13 @@ function AppShell() {
       }
 
       const overId = String(over.id);
-      const possibleColumns: Status[] = ["TO-DO", "IN PROGRESS", "DONE"];
-      if (possibleColumns.includes(overId as Status)) {
+      // Drop targets are this board's own columns, however many it has.
+      if (activeColumns.some((column) => column.id === overId)) {
         handleMoveTask(String(active.id), overId as Status, "drag");
       }
       setActiveId(null);
     },
-    [handleMoveTask]
+    [handleMoveTask, activeColumns]
   );
 
   const handleSaveTask = useCallback(
@@ -496,7 +504,10 @@ function AppShell() {
         appendLogEvent({
           t: Date.now(),
           taskId: task.id,
-          kind: before && before.status !== task.status && task.status === "DONE" ? "completed" : "edited",
+          kind:
+            before && before.status !== task.status && isTerminal(activeColumns, task.status)
+              ? "completed"
+              : "edited",
           from: before?.status,
           to: task.status,
           title: task.title,
@@ -589,6 +600,58 @@ function AppShell() {
     setClusters((prev) => etherCluster(prev, activeClusterId, Date.now()));
     pushToast(`"${cluster.name}" is a galaxy now.`, "success");
   }, [activeClusterId, clusters, tasks, pushToast, setClusters]);
+
+  /** Every column edit lands on the active cluster and nowhere else. */
+  const editColumns = useCallback(
+    (change: (columns: Column[]) => Column[]) => {
+      if (!activeClusterId) return;
+      setClusters((prev) =>
+        prev.map((cluster) =>
+          cluster.id === activeClusterId
+            ? { ...cluster, columns: change(cluster.columns) }
+            : cluster
+        )
+      );
+    },
+    [activeClusterId, setClusters]
+  );
+
+  const handleAddColumn = useCallback(
+    (name: string) => {
+      editColumns((columns) =>
+        addColumn(columns, name, () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`)
+      );
+    },
+    [editColumns]
+  );
+
+  const handleRenameColumn = useCallback(
+    (columnId: string, name: string) => {
+      editColumns((columns) => renameColumn(columns, columnId, name));
+    },
+    [editColumns]
+  );
+
+  /**
+   * Removing a column has to say where its cards go, or they vanish from the
+   * board while still sitting in the file. They fall back to the first column.
+   */
+  const handleRemoveColumn = useCallback(
+    (columnId: string) => {
+      const remaining = removeColumn(activeColumns, columnId);
+      if (remaining === activeColumns) return;
+      const landing = remaining[0].id;
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.clusterId === activeClusterId && task.status === columnId
+            ? touchTask({ ...task, status: landing }, Date.now())
+            : task
+        )
+      );
+      editColumns(() => remaining);
+    },
+    [activeColumns, activeClusterId, editColumns, setTasks]
+  );
 
   const handleViewChange = (nextView: ViewMode) => {
     setView(nextView);
@@ -857,10 +920,14 @@ function AppShell() {
             >
               <Board
                 tasks={visibleTasks}
+                columns={activeColumns}
                 onCardClick={handleCardClick}
                 onAdd={(status) => handleAddTask(status, "click")}
                 onOpenTask={handleOpenTaskById}
                 onMoveTask={(taskId, next) => handleMoveTask(taskId, next, "menu")}
+                onAddColumn={handleAddColumn}
+                onRenameColumn={handleRenameColumn}
+                onRemoveColumn={handleRemoveColumn}
               />
               <DragOverlay
                 dropAnimation={{ duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }}
@@ -944,10 +1011,14 @@ function AppShell() {
         <TaskModal
           mode={modalMode}
           initialTask={draftTask ?? undefined}
+          columns={activeColumns}
           onSave={handleSaveTask}
           onClose={closeModal}
           onMove={(taskId, next) => handleMoveTask(taskId, next, "menu")}
-          onMarkDone={(taskId) => handleMoveTask(taskId, "DONE", "menu")}
+          onMarkDone={(taskId) => {
+            const finishLine = terminalColumnId(activeColumns);
+            if (finishLine) handleMoveTask(taskId, finishLine, "menu");
+          }}
           onDelete={handleDeleteTask}
           onEther={handleSendToEther}
         />

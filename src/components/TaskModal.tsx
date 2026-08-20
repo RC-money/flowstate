@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "../App";
 import { addSubtask, removeSubtask, toggleSubtask, type Subtask } from "../lib/subtasks";
+import { isTerminal, terminalColumnId, type Column } from "../lib/columns/columns";
 
 type RichTask = Task & { description?: string };
 
@@ -13,10 +14,11 @@ interface TaskModalProps {
   onMarkDone?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onEther?: (taskId: string) => void;
+  /** The board this task lives on. Its last column is the finish line. */
+  columns: Column[];
 }
 
 const defaultStatus: Task["status"] = "TO-DO";
-const STATUS_OPTIONS: Task["status"][] = ["TO-DO", "IN PROGRESS", "DONE"];
 
 export default function TaskModal({
   mode,
@@ -27,12 +29,16 @@ export default function TaskModal({
   onMarkDone,
   onDelete,
   onEther,
+  columns,
 }: TaskModalProps) {
   const [title, setTitle] = useState(initialTask?.title ?? "");
   const [description, setDescription] = useState(initialTask?.description ?? "");
   const [status, setStatus] = useState<Task["status"]>(
     initialTask?.status ?? defaultStatus
   );
+  // "Finished" is reaching the last column, whatever this board calls it.
+  const finishLine = terminalColumnId(columns);
+  const isFinished = isTerminal(columns, status);
   const [dueDate, setDueDate] = useState(initialTask?.dueDate ?? "");
   const [tagsDraft, setTagsDraft] = useState((initialTask?.tags ?? []).join(", "));
   const [subtasks, setSubtasks] = useState<Subtask[]>(initialTask?.subtasks ?? []);
@@ -115,10 +121,11 @@ export default function TaskModal({
   };
 
   const handleMarkDone = () => {
-    setStatus("DONE");
+    if (!finishLine) return;
+    setStatus(finishLine);
     if (initialTask?.id) {
       onMarkDone?.(initialTask.id);
-      onMove?.(initialTask.id, "DONE");
+      onMove?.(initialTask.id, finishLine);
     }
   };
 
@@ -302,13 +309,13 @@ export default function TaskModal({
                 aria-label="Move task"
                 className="inline-flex rounded-xl bg-white/5 p-1"
               >
-                {STATUS_OPTIONS.map((option) => {
-                  const isActive = status === option;
+                {columns.map((column) => {
+                  const isActive = status === column.id;
                   return (
                     <button
-                      key={option}
+                      key={column.id}
                       type="button"
-                      onClick={() => handleMoveStatus(option)}
+                      onClick={() => handleMoveStatus(column.id)}
                       aria-pressed={isActive}
                       className={[
                         "px-4 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide transition",
@@ -317,7 +324,7 @@ export default function TaskModal({
                           : "text-slate-300 hover:text-white",
                       ].join(" ")}
                     >
-                      {option}
+                      {column.name}
                     </button>
                   );
                 })}
@@ -325,7 +332,7 @@ export default function TaskModal({
             </div>
             {mode === "edit" ? (
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                {status === "DONE" && initialTask?.id && onEther ? (
+                {isFinished && initialTask?.id && onEther ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -337,7 +344,7 @@ export default function TaskModal({
                   &#10024; Send into the Ether
                 </button>
               ) : null}
-              {status !== "DONE" ? (
+              {!isFinished ? (
                 <button
                   type="button"
                   className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:border-white/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
