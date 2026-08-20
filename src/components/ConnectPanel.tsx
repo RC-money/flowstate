@@ -81,7 +81,7 @@ what is open.`;
 /** What it can do once connected, in the order someone would try them. */
 const ABILITIES = [
   "See what is open, what is finished, and what is quietly rotting",
-  "Add tasks, move them between columns, set them aside in the Dark Forest",
+  "Add tasks, move them between columns, set one aside without deleting it",
   "Work across your clusters, and move a task from one project to another",
   "Undo the last thing it did",
 ];

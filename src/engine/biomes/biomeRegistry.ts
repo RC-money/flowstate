@@ -24,7 +24,7 @@ export const BIOME_REGISTRY: Record<string, BiomeParameters> = {
   archivist: {
     id: "archivist",
     label: "I’m overwhelmed",
-    description: "Soft indigo glow, gentle drift, Dark Forest comfort.",
+    description: "Soft indigo glow, gentle drift, room to rest.",
     background: "radial-gradient(1100px 620px at 22% -6%, rgba(99,102,241,0.30), transparent 62%), radial-gradient(900px 560px at 88% 8%, rgba(139,92,246,0.17), transparent 60%), linear-gradient(180deg, #08081a 0%, #05070f 100%)",
     ambientParticles: { speed: 0.45, density: 0.7 },
     heatSensitivity: 0.4,

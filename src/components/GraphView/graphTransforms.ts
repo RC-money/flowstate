@@ -9,7 +9,7 @@ export type GraphNode = {
   blocked?: boolean;
   deps: number;
   tags?: string[];
-  /** 0 fresh .. 1 fully neglected. Dims the body and feeds Dark Forest suggestions. */
+  /** 0 fresh .. 1 fully neglected. Dims the body and suggests setting it aside. */
   decay?: number;
   subtaskTotal?: number;
   subtaskDone?: number;

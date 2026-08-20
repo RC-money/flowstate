@@ -27,7 +27,7 @@ const Welcome: React.FC<WelcomeProps> = ({ onChoose }) => (
           planets fade instead of shouting at you.
         </li>
         <li>
-          <span className="text-white">The Dark Forest is honest rest.</span>{" "}
+          <span className="text-white">Setting something aside is honest rest.</span>{" "}
           Admitting "not now" moves a task there. Nothing is ever deleted for you.
         </li>
         <li>

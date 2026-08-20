@@ -132,7 +132,7 @@ export const run = (
         const next = replace(task.id, (current) =>
           touchTask({ ...current, darkForest: true }, now)
         );
-        return mutate(next, `"${task.title}" is resting in the Dark Forest.`);
+        return mutate(next, `"${task.title}" is set aside.`);
       });
 
     case "restore":
@@ -198,7 +198,7 @@ const FILTER_LABELS: Record<ListFilter, string> = {
   open: "open",
   done: "finished",
   decaying: "slipping",
-  dark: "resting in the Dark Forest",
+  dark: "set aside",
 };
 
 const describeFilter = (filter: ListFilter): string => FILTER_LABELS[filter];

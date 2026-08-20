@@ -51,8 +51,8 @@ const PERSONA_RULES: Array<(input: PersonaInput) => Persona | null> = [
     if (input.darkForestCount > 4 || input.userIntent === "overwhelm") {
       return {
         ...PERSONA_ROSTER.archivist,
-        rationale: "Dark Forest is swelling—time to let go with grace.",
-        questionTemplates: ["What deserves to rest in the Dark Forest tonight?"],
+        rationale: "A lot is set aside—time to let go with grace.",
+        questionTemplates: ["What deserves to be set aside tonight?"],
       };
     }
     return null;

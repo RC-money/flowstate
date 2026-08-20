@@ -1,7 +1,7 @@
 /**
  * Orbital decay: neglect made visible without shame. Instead of a red
  * OVERDUE badge, an untouched task slowly dims and drifts toward the edge
- * of the galaxy, and at full decay becomes a Dark Forest suggestion --
+ * of the galaxy, and at full decay is suggested for setting aside --
  * never an automatic archive. The information is the same; the tone is not.
  */
 
@@ -13,7 +13,7 @@ export const GRACE_DAYS = 3;
 /** Days of neglect at which decay is complete. */
 export const FULL_DECAY_DAYS = 14;
 
-/** Decay at or above this level makes a task a Dark Forest candidate. */
+/** Decay at or above this level suggests setting the task aside. */
 export const DARK_FOREST_THRESHOLD = 0.85;
 
 /**

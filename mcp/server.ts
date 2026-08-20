@@ -129,7 +129,7 @@ const COLUMN = z
 
 server.tool(
   "flow_list",
-  "List tasks on the Flowstate board. Filters: open (default), done, decaying (neglected, worst first), dark (resting in the Dark Forest).",
+  "List tasks on the Flowstate board. Filters: open (default), done, decaying (neglected, worst first), dark (set aside).",
   { filter: z.enum(["open", "done", "decaying", "dark"]).default("open") },
   async ({ filter }) => executeCommand({ kind: "list", filter })
 );
@@ -185,15 +185,15 @@ server.tool(
 );
 
 server.tool(
-  "flow_dark_forest",
-  "Let a task rest in the Dark Forest -- an honest 'not doing this now'. Restorable, never deleted.",
+  "flow_set_aside",
+  "Set a task aside -- an honest 'not doing this now'. It leaves the board, stays in the file, and can be brought back.",
   { target: z.string() },
   async ({ target }) => executeCommand({ kind: "darkForest", target })
 );
 
 server.tool(
-  "flow_restore",
-  "Restore a task from the Dark Forest to the board.",
+  "flow_bring_back",
+  "Bring a task that was set aside back onto the board.",
   { target: z.string() },
   async ({ target }) => executeCommand({ kind: "restore", target })
 );

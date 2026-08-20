@@ -18,7 +18,7 @@ const DarkForestPanel: React.FC<DarkForestPanelProps> = ({
     <section className="mt-6 rounded-3xl border border-white/10 bg-[#060a17]/80 p-5 text-white shadow-inner shadow-black/40">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-white/60">Dark Forest</p>
+          <p className="text-xs uppercase tracking-[0.4em] text-white/60">Set aside</p>
           <p className="text-lg font-semibold">Entropy Sanctuary</p>
         </div>
         <span className="rounded-full border border-white/15 px-3 py-1 text-xs tracking-[0.3em] text-white/60">
@@ -54,7 +54,7 @@ const DarkForestPanel: React.FC<DarkForestPanelProps> = ({
         <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/60">Resting Tasks</p>
           {archived.length === 0 ? (
-            <p className="mt-3 text-sm text-white/50">Dark Forest is empty.</p>
+            <p className="mt-3 text-sm text-white/50">Nothing set aside.</p>
           ) : (
             <ul className="mt-3 space-y-3">
               {archived.map((task) => (

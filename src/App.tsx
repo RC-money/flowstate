@@ -417,7 +417,7 @@ function AppShell() {
         prev.map((task) => (task.id === taskId ? touchTask({ ...task, darkForest: false }) : task))
       );
       appendLogEvent({ t: Date.now(), taskId, kind: "restored", title: tasksById[taskId]?.title });
-      pushToast("Archivist: Brought back from the Dark Forest.", "success");
+      pushToast("Archivist: Brought back.", "success");
     },
     [pushToast, setTasks, tasksById]
   );
@@ -918,7 +918,7 @@ function AppShell() {
         ? [
             {
               id: "cmd-dark-forest-restore",
-              label: `Restore ${darkForestTasks.length} task${darkForestTasks.length === 1 ? "" : "s"} from the Dark Forest`,
+              label: `Bring back ${darkForestTasks.length} task${darkForestTasks.length === 1 ? "" : "s"}`,
               description: "Bring work you set aside back onto the board.",
               hint: "R",
               run: () => {

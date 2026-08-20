@@ -28,7 +28,7 @@ export const generateStrangeLoopQuestion = (
     const title = entropyCandidate.title || "this task";
     return createQuestion(
       "entropy",
-      `${title} is destabilizing. Revive it or let it drift into the Dark Forest?`,
+      `${title} is destabilizing. Revive it, or set it aside?`,
       entropyCandidate.taskId
     );
   }
