@@ -77,11 +77,11 @@ export const ClusterSwitcher = ({
               }`}
             >
               <span className="normal-case tracking-normal">{cluster.name}</span>
-              {open > 0 ? (
-                <span
-                  className={isActive ? "text-white/70" : "text-[#6d7899]"}
-                  aria-label={`${open} open`}
-                >
+              {/* Only on the clusters you are not in. The one you are looking
+                  at already says how much is open, in the columns and in the
+                  status line; a number here would just be a third answer. */}
+              {!isActive && open > 0 ? (
+                <span className="text-[#6d7899]" aria-label={`${open} open`}>
                   {open}
                 </span>
               ) : null}
