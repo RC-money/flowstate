@@ -28,6 +28,56 @@ interface Recipe {
   snippet: string;
 }
 
+/**
+ * For every assistant that cannot speak MCP but can open a file -- which is
+ * most of them. Handing over the format and the rules directly is a wider door
+ * than a config block, and it costs nothing to keep open.
+ *
+ * Everything stated here is load-bearing. An assistant that writes a timestamp
+ * into dueDate, or a status no column has, produces a board that still loads
+ * (the app repairs rather than rejects) but reads wrong to the person who owns
+ * it.
+ */
+const HANDOVER_PROMPT = `You are managing my Flowstate task board. It is a single JSON file at:
+~/Library/Application Support/com.flowstate.app/tasks.json
+
+Read it before every change and write it back whole. The shape is:
+
+{
+  "clusters": [
+    { "id": "c_1", "name": "Work", "createdAt": 1700000000000,
+      "columns": [ { "id": "TO-DO", "name": "To-Do" }, { "id": "DONE", "name": "Done" } ] }
+  ],
+  "tasks": [
+    { "id": "t_1", "title": "Refactor auth", "status": "TO-DO",
+      "clusterId": "c_1", "createdAt": 1700000000000, "updatedAt": 1700000000000 }
+  ]
+}
+
+Rules, all of which matter:
+
+- A cluster is a project with its own board. A task's clusterId says which one
+  it belongs to; its status is the id of a column in THAT cluster's columns.
+  Never give a task a status no column of its cluster has.
+- The LAST column in a cluster's list is the finish line. When a task reaches
+  it, set completedAt to the current epoch milliseconds. If it leaves, remove
+  completedAt. That stamp is what earns the task a permanent star.
+- Set updatedAt to now on every task you change. It drives how the app shows
+  neglect, so leaving it stale makes finished work look abandoned.
+- dueDate, if present, is a calendar day as "YYYY-MM-DD". Never a timestamp --
+  a timestamp lands the task on the wrong day for anyone west of Greenwich.
+- Never delete a task. To set one aside, add "darkForest": true. To bring it
+  back, remove that field.
+- Keep every id exactly as it is, and keep fields you do not understand.
+- Optional fields you may see and should preserve: tags, notes, description,
+  subtasks, dependsOn, etheredAt, orbitSeed.
+
+Only ever change clusters and tasks. Do not touch any other file, and do not
+add fields of your own.
+
+Tell me what you changed in one line. Start by reading the file and telling me
+what is open.`;
+
 const RECIPES: Recipe[] = [
   {
     id: "claude-code",
@@ -55,6 +105,12 @@ const RECIPES: Recipe[] = [
     snippet: `[mcp_servers.flowstate]
 command = "node"
 args = ["${SERVER_PATH}"]`,
+  },
+  {
+    id: "any-ai",
+    client: "Any other AI",
+    where: "No MCP? Paste this into anything that can read and write files:",
+    snippet: HANDOVER_PROMPT,
   },
 ];
 
@@ -173,7 +229,7 @@ export default function ConnectPanel({ open, onClose }: ConnectPanelProps) {
                 </button>
               </div>
               <p className="mt-1 text-[11px] text-slate-500">{recipe.where}</p>
-              <pre className="mt-2 overflow-x-auto rounded-xl bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[#c9d0ff]">
+              <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[#c9d0ff]">
                 {recipe.snippet}
               </pre>
             </div>
