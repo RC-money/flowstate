@@ -143,8 +143,10 @@ interface GraphViewProps {
   onConstellationsChange?: (constellations: Constellation[]) => void;
   /** Whether the neighbouring clusters are drawn around this one. */
   showUniverse?: boolean;
-  /** Absent means the legend offers no universe toggle at all. */
+  /** Absent means the Show panel offers no universe toggle at all. */
   onToggleUniverse?: () => void;
+  /** Drawn inside the sky when the universe is allowed. */
+  universeSlot?: React.ReactNode;
   /** The cluster name to offer ending. Absent means it has not earned it. */
   etherLabel?: string;
   onEtherCluster?: () => void;
@@ -367,6 +369,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   onConstellationsChange,
   showUniverse,
   onToggleUniverse,
+  universeSlot,
   etherLabel,
   onEtherCluster,
   tethers = [],
@@ -925,13 +928,17 @@ const GraphView: React.FC<GraphViewProps> = ({
       });
 
       const glow = sunById(getCelestialPrefs().sun).glow;
-      const corona = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 4.2);
-      corona.addColorStop(0, `${glow}6b`);
-      corona.addColorStop(0.4, `${glow}29`);
+      // Hugging the star rather than filling the sky. At 4.2r the corona was
+      // wider than the viewport once you zoomed in, so its faintest stop
+      // washed everything a flat olive and read as dead space around the sun.
+      const coronaR = r * 1.9;
+      const corona = ctx.createRadialGradient(0, 0, r * 0.9, 0, 0, coronaR);
+      corona.addColorStop(0, `${glow}5c`);
+      corona.addColorStop(0.45, `${glow}1f`);
       corona.addColorStop(1, `${glow}00`);
       ctx.fillStyle = corona;
       ctx.beginPath();
-      ctx.arc(0, 0, r * 4.2, 0, Math.PI * 2);
+      ctx.arc(0, 0, coronaR, 0, Math.PI * 2);
       ctx.fill();
 
       const star = sunById(getCelestialPrefs().sun);
@@ -1688,6 +1695,11 @@ const GraphView: React.FC<GraphViewProps> = ({
             onWheelCapture={handleWheelScroll}
             style={graphBackgroundStyle}
           >
+            {/* Rendered here rather than over the whole section: the section
+                includes the controls, and neighbouring galaxies drawn over
+                them landed on top of the panels. This is the sky. */}
+            {showUniverse ? universeSlot : null}
+
             {tetherDraft ? (
               <svg className="pointer-events-none absolute inset-0 z-20" role="presentation">
                 <defs>

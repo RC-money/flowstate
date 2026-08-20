@@ -242,6 +242,17 @@ function AppShell() {
     () => activeCluster?.columns ?? DEFAULT_COLUMNS,
     [activeCluster]
   );
+  /** Each cluster's own work, for the miniatures the universe layer draws. */
+  const tasksByCluster = useMemo(() => {
+    const grouped: Record<string, Task[]> = {};
+    tasks.forEach((task) => {
+      const id = task.clusterId;
+      if (!id || task.darkForest || task.etheredAt !== undefined) return;
+      (grouped[id] ??= []).push(task);
+    });
+    return grouped;
+  }, [tasks]);
+
   const totalCountsByCluster = useMemo(() => {
     const counts: Record<string, number> = {};
     tasks.forEach((task) => {
@@ -1060,6 +1071,15 @@ function AppShell() {
                   constellations={constellations}
                   showUniverse={showUniverse}
                   onToggleUniverse={() => setShowUniverse((prev) => !prev)}
+                  universeSlot={
+                    <UniverseOverlay
+                      clusters={clusters}
+                      activeClusterId={activeClusterId}
+                      totalCounts={totalCountsByCluster}
+                      tasksByCluster={tasksByCluster}
+                      onEnter={handleEnterCluster}
+                    />
+                  }
                   etherLabel={
                     activeCluster && clusterCanEther(activeCluster.id)
                       ? activeCluster.name
@@ -1071,14 +1091,7 @@ function AppShell() {
                 />
               </React.Suspense>
 
-              {showUniverse ? (
-                <UniverseOverlay
-                  clusters={clusters}
-                  activeClusterId={activeClusterId}
-                  totalCounts={totalCountsByCluster}
-                  onEnter={handleEnterCluster}
-                />
-              ) : null}
+
 
             </div>
           )}

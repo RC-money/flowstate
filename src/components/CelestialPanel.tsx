@@ -152,14 +152,6 @@ const CelestialPanel = () => {
                     }
                     className="h-7 w-7 cursor-pointer rounded-full border border-white/15 bg-transparent [color-scheme:dark]"
                   />
-                  <span
-                    aria-hidden="true"
-                    className="h-3 w-3 rounded-full"
-                    style={{
-                      backgroundColor: prefs.moonTints[status],
-                      boxShadow: prefs.moonGlow ? `0 0 7px ${glow}` : "none",
-                    }}
-                  />
                 </span>
               </div>
             );
@@ -170,14 +162,14 @@ const CelestialPanel = () => {
       <div className="mt-5 border-t border-white/10 pt-4">
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
-            The sun
+            Helios
           </p>
           <span className="text-[10px] uppercase tracking-wide text-slate-500">
             {sunById(prefs.sun).label}
           </span>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          What burns at the centre in Helios.
+          What burns at the centre.
         </p>
         <div role="group" aria-label="Sun" className="mt-2 flex flex-wrap gap-1.5">
           {SUNS.map((sun) => {
@@ -209,7 +201,7 @@ const CelestialPanel = () => {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
-              Subtask stars
+              Subtask
             </p>
             <p className="mt-1 text-xs text-slate-500">
               What a finished subtask burns on the chip.
