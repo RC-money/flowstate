@@ -16,7 +16,7 @@ const PERIOD_PER_SUBTASK_MS = 2800;
 const MAX_PERIOD_MS = 26_000;
 
 /** How much a full-weight subtask stretches its moon's orbit. */
-const HEAVINESS_DRAG = 1.6;
+const HEAVINESS_DRAG = 2.6;
 
 /** Range of per-moon orbital inclination, as a squash factor on the vertical. */
 const MIN_INCLINATION = 0.16;
@@ -36,9 +36,10 @@ const HELIOS_MAX_PERIOD_MS = 150_000;
 export const RING_THRESHOLD = 5;
 
 /** Growth per subtask, and the ceiling on that growth. */
-const SCALE_PER_SUBTASK = 0.11;
-const MAX_SCALE = 2.3;
-const MAX_COUNTED_SUBTASKS = 10;
+const SCALE_GROWTH = 0.36;
+const SCALE_CURVE = 0.7;
+const MAX_SCALE = 3.4;
+const MAX_COUNTED_SUBTASKS = 24;
 
 /** Counts arrive from user data, so treat junk as the quietest case. */
 const normalizeCount = (count: number): number => {
@@ -120,7 +121,44 @@ export const heliosOrbitPeriodMs = (subtaskCount: number): number => {
 export const planetScale = (count: number): number => {
   if (!Number.isFinite(count) || count <= 0) return 1;
   const counted = Math.min(MAX_COUNTED_SUBTASKS, Math.floor(count));
-  return Math.min(MAX_SCALE, 1 + counted * SCALE_PER_SUBTASK);
+  // A power curve rather than a straight line: the jump from one subtask to
+  // three should be obvious, the way Mars and Saturn are obviously not the
+  // same object, while a very heavy task still stops somewhere sane.
+  return Math.min(MAX_SCALE, 1 + SCALE_GROWTH * Math.pow(counted, SCALE_CURVE));
+};
+
+/** Electron capacity per shell, inner to outer. */
+const SHELL_CAPACITIES = [2, 8, 18, 32];
+
+/**
+ * How the moons distribute into shells, inner first, the way electrons fill
+ * an atom. Five moons sit as [2, 3]; twelve as [2, 8, 2].
+ */
+export const electronShells = (count: number): number[] => {
+  if (!Number.isFinite(count) || count <= 0) return [];
+  let left = Math.floor(count);
+  const shells: number[] = [];
+  let i = 0;
+  while (left > 0) {
+    // Past the known capacities, keep widening rather than stopping.
+    const capacity = SHELL_CAPACITIES[i] ?? SHELL_CAPACITIES[SHELL_CAPACITIES.length - 1];
+    const take = Math.min(capacity, left);
+    shells.push(take);
+    left -= take;
+    i += 1;
+  }
+  return shells;
+};
+
+/** Which shell a given moon belongs to. */
+export const shellOf = (index: number, count: number): number => {
+  const shells = electronShells(count);
+  let seen = 0;
+  for (let i = 0; i < shells.length; i += 1) {
+    seen += shells[i];
+    if (index < seen) return i;
+  }
+  return Math.max(0, shells.length - 1);
 };
 
 /** Whether a planet is heavy enough to have collected a ring system. */

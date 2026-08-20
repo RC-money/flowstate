@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  electronShells,
   hasRings,
   heliosOrbitPeriodMs,
   heliosPhase,
@@ -9,6 +10,7 @@ import {
   orbitPeriodMs,
   planetScale,
   RING_THRESHOLD,
+  shellOf,
   subtaskHeaviness,
 } from "./orbitalMechanics";
 
@@ -80,7 +82,7 @@ describe("planetScale", () => {
 
   it("stops growing past the cap so one task cannot swallow the galaxy", () => {
     expect(planetScale(50)).toBe(planetScale(500));
-    expect(planetScale(500)).toBeLessThanOrEqual(2.3);
+    expect(planetScale(500)).toBeLessThanOrEqual(3.4);
   });
 });
 
@@ -188,5 +190,63 @@ describe("heliosPosition", () => {
     const travelled = (p: { x: number; y: number }) =>
       Math.abs(angleOf(p) - angleOf(start));
     expect(travelled(light)).toBeGreaterThan(travelled(heavy));
+  });
+});
+
+describe("electronShells", () => {
+  it("has no shells with nothing in orbit", () => {
+    expect(electronShells(0)).toEqual([]);
+  });
+
+  it("fills the inner shell first, two at a time", () => {
+    expect(electronShells(1)).toEqual([1]);
+    expect(electronShells(2)).toEqual([2]);
+  });
+
+  it("opens a second shell once the first is full", () => {
+    expect(electronShells(3)).toEqual([2, 1]);
+    expect(electronShells(10)).toEqual([2, 8]);
+  });
+
+  it("opens a third shell after that", () => {
+    expect(electronShells(12)).toEqual([2, 8, 2]);
+  });
+
+  it("always accounts for every moon", () => {
+    for (const n of [1, 4, 7, 15, 29, 60]) {
+      const shells = electronShells(n);
+      expect(shells.reduce((a, b) => a + b, 0)).toBe(n);
+    }
+  });
+
+  it("ignores nonsense counts", () => {
+    expect(electronShells(-3)).toEqual([]);
+    expect(electronShells(Number.NaN)).toEqual([]);
+  });
+});
+
+describe("shellOf", () => {
+  it("maps each moon index to the shell holding it", () => {
+    // Five moons fill [2, 3]: indices 0-1 inner, 2-4 outer.
+    expect(shellOf(0, 5)).toBe(0);
+    expect(shellOf(1, 5)).toBe(0);
+    expect(shellOf(2, 5)).toBe(1);
+    expect(shellOf(4, 5)).toBe(1);
+  });
+
+  it("keeps a lone moon on the inner shell", () => {
+    expect(shellOf(0, 1)).toBe(0);
+  });
+});
+
+describe("planetScale as an atom", () => {
+  it("separates sizes dramatically, the way planets actually differ", () => {
+    // A one-subtask world and a ten-subtask world should not look alike.
+    expect(planetScale(10) / planetScale(1)).toBeGreaterThan(1.7);
+  });
+
+  it("still never shrinks below its natural size", () => {
+    expect(planetScale(0)).toBe(1);
+    expect(planetScale(1)).toBeGreaterThan(1);
   });
 });

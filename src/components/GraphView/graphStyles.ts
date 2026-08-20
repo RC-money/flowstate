@@ -1,4 +1,5 @@
 import type { Task } from "../../App";
+import sunUrl from "../../assets/planets/sun.png";
 import moon0 from "../../assets/moons/moon0.png";
 import moon1 from "../../assets/moons/moon1.png";
 import moon2 from "../../assets/moons/moon2.png";
@@ -25,6 +26,9 @@ const MOON_SPRITES: Array<HTMLImageElement | null> = [
  * Every body a column can fly. Moons double as planets -- at planet scale they
  * read as small dense worlds, which is exactly what a moon portrait is.
  */
+/** The HELIOS sun, rendered from the source GLB at 256px like the planets. */
+export const SUN_SPRITE: HTMLImageElement | null = loadSprite(sunUrl);
+
 const SKIN_SPRITES: Record<SkinId, HTMLImageElement | null> = {
   moon0: MOON_SPRITES[0],
   moon1: MOON_SPRITES[1],
@@ -63,10 +67,11 @@ import {
   type StatusKey,
 } from "../../lib/celestialPrefs";
 import {
-  hasRings,
+  electronShells,
   moonInclination,
   moonOrbitAngle,
   planetScale,
+  shellOf,
   subtaskHeaviness,
 } from "../../lib/orbitalMechanics";
 
@@ -177,22 +182,42 @@ export const drawNode = (
   // The orbit is a tilted plane rather than a flat ring, so a moon passes
   // behind the planet on the far side and in front of it on the near side.
   // sin(angle) is the depth: +1 is nearest the viewer, -1 is furthest.
-  const orbitR = radius * 1.72;
+  // Moons fill shells like electrons: two in the innermost, then eight, and so
+  // on. Each shell is its own orbit at its own radius, which is what turns a
+  // busy task from a dot in a ring into something with structure.
+  const shells = electronShells(moonCount);
+  const shellRadius = (shell: number) => radius * (1.5 + shell * 0.62);
+  // Each shell is tipped a third of a turn from the last, so the rings cross
+  // over one another the way an atom is drawn rather than sitting as flat
+  // concentric bands.
+  const shellRotation = (shell: number) => shell * (Math.PI / 3);
+
   const placements = (moons ?? []).map((entry, i) => {
+    const shell = shellOf(i, moonCount);
+    const orbitR = shellRadius(shell);
     // One loose end whips around; a crowded task turns slowly. A subtask
     // carrying more detail is heavier still, and drags its own orbit out.
-    const angle = moonOrbitAngle(i, moonCount, now, subtaskHeaviness(entry.title));
+    // Outer shells lag further behind, so the shells never move as one block.
+    const angle =
+      moonOrbitAngle(i, moonCount, now, subtaskHeaviness(entry.title)) *
+      (1 - shell * 0.22);
     const depth = Math.sin(angle);
     const nearness = (depth + 1) / 2; // 0 far, 1 near
     // Each moon rides its own plane, so the swarm has vertical spread rather
     // than sitting in one flat band.
     const tilt = moonInclination(i);
+    // Place on the shell's own ellipse, then tip it into the shell's plane.
+    const lx = Math.cos(angle) * orbitR;
+    const ly = depth * orbitR * tilt;
+    const rot = shellRotation(shell);
+    const cosR = Math.cos(rot);
+    const sinR = Math.sin(rot);
     return {
       entry,
-      sx: planetCenterX + Math.cos(angle) * orbitR,
-      sy: planetCenterY + depth * orbitR * tilt,
+      sx: planetCenterX + lx * cosR - ly * sinR,
+      sy: planetCenterY + lx * sinR + ly * cosR,
       // Near moons read bigger; the parallax is what sells the tilt.
-      moonR: Math.max(1.8, radius * 0.25 * (0.76 + 0.36 * nearness)),
+      moonR: Math.max(1.6, radius * 0.22 * (0.76 + 0.36 * nearness)),
       inFront: depth > 0,
     };
   });
@@ -226,19 +251,21 @@ export const drawNode = (
     ctx.restore();
   };
 
-  /** Half of the ring band, in the same tilted plane as the moons. */
-  const strokeRingArc = (from: number, to: number) => {
+  /** Half of one shell's ring, in the same tilted plane as its moons. */
+  const strokeShellArc = (shell: number, from: number, to: number) => {
+    const r = shellRadius(shell);
     ctx.save();
-    ctx.globalAlpha = 0.55 * vitality;
+    // Outer shells sit fainter, so the innermost reads as the tightest bond.
+    ctx.globalAlpha = (0.5 - shell * 0.09) * vitality;
     ctx.strokeStyle = glowFrom(skin.accent, 0.9);
-    ctx.lineWidth = Math.max(0.9, radius * 0.11);
+    ctx.lineWidth = Math.max(0.7, radius * 0.055);
     ctx.beginPath();
     ctx.ellipse(
       planetCenterX,
       planetCenterY,
-      radius * 1.48,
-      radius * 1.48 * ORBIT_TILT,
-      0,
+      r,
+      r * ORBIT_TILT,
+      shellRotation(shell),
       from,
       to
     );
@@ -247,7 +274,7 @@ export const drawNode = (
   };
 
   // Far side first: the planet will be painted over these.
-  if (hasRings(moonCount)) strokeRingArc(Math.PI, Math.PI * 2);
+  shells.forEach((_, shell) => strokeShellArc(shell, Math.PI, Math.PI * 2));
   placements.filter((p) => !p.inFront).forEach(drawMoon);
 
   ctx.globalAlpha = vitality;
@@ -278,7 +305,7 @@ export const drawNode = (
   ctx.closePath();
 
   // Near side last, so these cross in front of the body.
-  if (hasRings(moonCount)) strokeRingArc(0, Math.PI);
+  shells.forEach((_, shell) => strokeShellArc(shell, 0, Math.PI));
   placements.filter((p) => p.inFront).forEach(drawMoon);
 
   ctx.restore();

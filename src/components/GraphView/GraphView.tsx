@@ -21,6 +21,7 @@ import {
   getLinkWidth,
   getParticleColor,
   legendSwatches,
+  SUN_SPRITE,
 } from "./graphStyles";
 import Starfield from "./Starfield";
 import NovaStar from "../NovaStar";
@@ -584,6 +585,44 @@ const GraphView: React.FC<GraphViewProps> = ({
     return window.localStorage.getItem(HELIOS_STORAGE_KEY) === "1";
   });
   const heliosActive = heliosMode;
+  const [heliosFrozen, setHeliosFrozen] = useState(false);
+  // Spin the whole system like turning a table, so you can bring any planet
+  // round to the front without dragging it out of its orbit.
+  const [heliosSpin, setHeliosSpin] = useState(0);
+  const heliosSpinRef = useRef(0);
+  useEffect(() => {
+    heliosSpinRef.current = (heliosSpin * Math.PI) / 180;
+  }, [heliosSpin]);
+  // Freezing holds the system exactly where it is; resuming picks up from the
+  // same angle rather than snapping forward to wall-clock time.
+  const heliosClockRef = useRef<{ frozenAt: number | null; offset: number }>({
+    frozenAt: null,
+    offset: 0,
+  });
+  const toggleHeliosFreeze = useCallback(() => {
+    setHeliosFrozen((prev) => {
+      const clock = heliosClockRef.current;
+      if (prev) {
+        clock.offset += performance.now() - (clock.frozenAt ?? performance.now());
+        clock.frozenAt = null;
+      } else {
+        clock.frozenAt = performance.now();
+      }
+      return !prev;
+    });
+  }, []);
+
+  /** Centres the sun and pulls back to hold the outermost lane. */
+  const frameHelios = useCallback((transition = 700) => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.centerAt?.(0, 0, transition);
+    const el = graphViewportRef.current;
+    const fit =
+      Math.min(el?.clientWidth ?? 900, el?.clientHeight ?? 520) /
+      (heliosRadius("DONE") * 2.4);
+    fg.zoom?.(Math.max(0.2, Math.min(1.2, fit)), transition);
+  }, []);
   const toggleHelios = useCallback(() => {
     setHeliosMode((prev) => {
       const next = !prev;
@@ -600,19 +639,11 @@ const GraphView: React.FC<GraphViewProps> = ({
     // Put the sun in the middle of the frame and pull back far enough to hold
     // the outermost lane; otherwise you arrive somewhere off in the dark. The
     // delay lets the graph instance and the pinned positions exist first.
-    const frameTimer = window.setTimeout(() => {
-      const fg = fgRef.current;
-      if (!fg) return;
-      fg.centerAt?.(0, 0, 700);
-      const el = graphViewportRef.current;
-      const fit =
-        Math.min(el?.clientWidth ?? 900, el?.clientHeight ?? 520) /
-        (heliosRadius("DONE") * 2.4);
-      fg.zoom?.(Math.max(0.2, Math.min(1.2, fit)), 700);
-    }, 450);
+    const frameTimer = window.setTimeout(() => frameHelios(700), 450);
     let raf = 0;
     const step = () => {
-      const now = performance.now();
+      const clock = heliosClockRef.current;
+      const now = (clock.frozenAt ?? performance.now()) - clock.offset;
       graphData.nodes.forEach((node) => {
         const n = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
         const { x, y } = heliosPosition(
@@ -621,10 +652,13 @@ const GraphView: React.FC<GraphViewProps> = ({
           now,
           n.subtaskMoons?.length ?? 0
         );
-        n.x = x;
-        n.y = y;
-        n.fx = x;
-        n.fy = y;
+        const spin = heliosSpinRef.current;
+        const sx = x * Math.cos(spin) - y * Math.sin(spin);
+        const sy = x * Math.sin(spin) + y * Math.cos(spin);
+        n.x = sx;
+        n.y = sy;
+        n.fx = sx;
+        n.fy = sy;
       });
       raf = requestAnimationFrame(step);
     };
@@ -639,7 +673,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         delete n.fy;
       });
     };
-  }, [heliosActive, graphData.nodes]);
+  }, [heliosActive, graphData.nodes, frameHelios]);
 
   /** Paints the sun and its lanes beneath the planets, in graph coordinates. */
   const drawHelios = useCallback(
@@ -668,14 +702,27 @@ const GraphView: React.FC<GraphViewProps> = ({
       ctx.arc(0, 0, r * 4.2, 0, Math.PI * 2);
       ctx.fill();
 
-      const body = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);
-      body.addColorStop(0, "#fffdf3");
-      body.addColorStop(0.45, "#ffd35c");
-      body.addColorStop(1, "#f97316");
-      ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fill();
+      const sunReady = Boolean(
+        SUN_SPRITE && SUN_SPRITE.complete && SUN_SPRITE.naturalWidth > 0
+      );
+      if (sunReady && SUN_SPRITE) {
+        // The portrait, clipped to the disc so the corona reads as its own light.
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(SUN_SPRITE, -r, -r, r * 2, r * 2);
+        ctx.restore();
+      } else {
+        const body = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);
+        body.addColorStop(0, "#fffdf3");
+        body.addColorStop(0.45, "#ffd35c");
+        body.addColorStop(1, "#f97316");
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     },
     [heliosActive]
@@ -1313,12 +1360,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
   }, [graphData.nodes, isNodeVisible, updateNodePositions]);
 
-  const handleZoomSliderChange = useCallback((value: number) => {
-    const next = Math.min(2.4, Math.max(0.5, value));
-    setZoomLevel(next);
-    fgRef.current?.zoom?.(next, 250);
-  }, []);
-
   const toggleScrollZoom = useCallback(() => {
     scrollZoomOverrideRef.current = true;
     setScrollZoomEnabled((prev) => !prev);
@@ -1592,22 +1633,9 @@ const GraphView: React.FC<GraphViewProps> = ({
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
           <div className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-[11px] text-slate-200 shadow-inner shadow-black/30">
             <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              <span>Zoom</span>
+              <span>View</span>
               <span>{Math.round(zoomLevel * 100)}%</span>
             </div>
-            <label className="sr-only" htmlFor="graph-zoom-slider">
-              Graph zoom
-            </label>
-            <input
-              id="graph-zoom-slider"
-              type="range"
-              min={0.5}
-              max={2.4}
-              step={0.05}
-              value={zoomLevel}
-              onChange={(event) => handleZoomSliderChange(Number(event.target.value))}
-              className="mt-2 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-white"
-            />
             <button
               type="button"
               onClick={toggleScrollZoom}
@@ -1615,10 +1643,31 @@ const GraphView: React.FC<GraphViewProps> = ({
             >
               {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
             </button>
+            {heliosActive ? (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span>Spin</span>
+                  <span>{heliosSpin}&deg;</span>
+                </div>
+                <label className="sr-only" htmlFor="helios-spin">
+                  Spin the system
+                </label>
+                <input
+                  id="helios-spin"
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={1}
+                  value={heliosSpin}
+                  onChange={(event) => setHeliosSpin(Number(event.target.value))}
+                  className="mt-2 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-amber-300"
+                />
+              </div>
+            ) : null}
             <div className="mt-3 flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => frameGraphToNodes(600, 60)}
+                onClick={() => (heliosActive ? frameHelios(600) : frameGraphToNodes(600, 60))}
                 className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10"
               >
                 Fit to galaxy
@@ -1637,6 +1686,22 @@ const GraphView: React.FC<GraphViewProps> = ({
               >
                 Helios
               </button>
+              {heliosActive ? (
+                <button
+                  type="button"
+                  aria-pressed={heliosFrozen}
+                  onClick={toggleHeliosFreeze}
+                  title="Hold the system exactly where it is"
+                  className={[
+                    "flex-1 rounded-lg border px-3 py-2 text-[11px] font-medium transition",
+                    heliosFrozen
+                      ? "border-cyan-300/70 bg-cyan-400/15 text-cyan-100"
+                      : "border-white/15 text-slate-300 hover:bg-white/10",
+                  ].join(" ")}
+                >
+                  {heliosFrozen ? "Frozen" : "Freeze"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 aria-pressed={Boolean(graphPrefs.idleDrift)}
