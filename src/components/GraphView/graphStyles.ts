@@ -67,11 +67,12 @@ import {
   type StatusKey,
 } from "../../lib/celestialPrefs";
 import {
-  electronShells,
   moonInclination,
   moonOrbitAngle,
+  moonShells,
   planetScale,
   shellOf,
+  shellOrientation,
   subtaskHeaviness,
 } from "../../lib/orbitalMechanics";
 
@@ -185,12 +186,10 @@ export const drawNode = (
   // Moons fill shells like electrons: two in the innermost, then eight, and so
   // on. Each shell is its own orbit at its own radius, which is what turns a
   // busy task from a dot in a ring into something with structure.
-  const shells = electronShells(moonCount);
+  const shells = moonShells(moonCount);
   const shellRadius = (shell: number) => radius * (1.5 + shell * 0.62);
-  // Each shell is tipped a third of a turn from the last, so the rings cross
-  // over one another the way an atom is drawn rather than sitting as flat
-  // concentric bands.
-  const shellRotation = (shell: number) => shell * (Math.PI / 3);
+  // Horizontal, then stood upright against it, then cocked between the two.
+  const shellRotation = (shell: number) => shellOrientation(shell);
 
   const placements = (moons ?? []).map((entry, i) => {
     const shell = shellOf(i, moonCount);

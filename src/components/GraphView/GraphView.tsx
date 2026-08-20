@@ -1456,13 +1456,20 @@ const GraphView: React.FC<GraphViewProps> = ({
     if (typeof window === "undefined") {
       return { left: baseX + 12, top: baseY + 12 };
     }
-    const maxLeft = window.innerWidth - 280;
-    const maxTop = window.innerHeight - 180;
-    // Sits just off the body it describes. Further away and the card reads as
-    // belonging to the canvas rather than to the planet under the cursor.
+    const CARD_W = 232;
+    const CARD_H = 150;
+    // Planets carry shells now and can be sizeable, so the card stands off far
+    // enough to clear the body it describes rather than sitting on top of it.
+    const CLEARANCE = 74;
+    const maxLeft = window.innerWidth - CARD_W - 12;
+    const maxTop = window.innerHeight - CARD_H - 12;
+    // Flip to the near side when there is no room on the far side.
+    const preferRight = baseX + CLEARANCE + CARD_W < window.innerWidth - 12;
+    const left = preferRight ? baseX + CLEARANCE : baseX - CLEARANCE - CARD_W;
     return {
-      left: Math.min(maxLeft, Math.max(16, baseX + 14)),
-      top: Math.min(maxTop, Math.max(16, baseY + 12)),
+      left: Math.min(maxLeft, Math.max(12, left)),
+      // Centred on the body rather than hanging below it.
+      top: Math.min(maxTop, Math.max(12, baseY - CARD_H / 2)),
     };
   }, [cursor, tooltipPosition]);
 
@@ -1658,17 +1665,17 @@ const GraphView: React.FC<GraphViewProps> = ({
             />
             {hoveredGraphNode ? (
               <div
-                className="pointer-events-none fixed z-30 max-w-xs rounded-2xl border border-white/10 bg-[#0B1220]/95 p-4 text-sm text-slate-100 shadow-xl shadow-black/40 backdrop-blur"
+                className="pointer-events-none fixed z-30 w-[232px] rounded-xl border border-white/10 bg-[#0B1220]/92 p-3 text-sm text-slate-100 shadow-xl shadow-black/40 backdrop-blur"
                 style={tooltipCoords}
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   {hoveredTask?.status ?? hoveredGraphNode.status}
                 </p>
-                <p className="mt-1 text-base font-semibold text-white">
+                <p className="mt-0.5 text-[13px] font-semibold leading-snug text-white">
                   {hoveredTask?.title ?? hoveredGraphNode.id}
                 </p>
                 {hoveredGraphNode.tags && hoveredGraphNode.tags.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1">
+                  <div className="mt-2 flex flex-wrap gap-1">
                     {hoveredGraphNode.tags.map((tag) => (
                       <span
                         key={tag}
@@ -1680,13 +1687,13 @@ const GraphView: React.FC<GraphViewProps> = ({
                   </div>
                 ) : null}
                 {hoveredTask?.subtasks && hoveredTask.subtasks.length > 0 ? (
-                  <div className="mt-3 border-t border-white/10 pt-2.5">
+                  <div className="mt-2 border-t border-white/10 pt-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       {hoveredTask.subtasks.filter((s) => s.done).length} of{" "}
                       {hoveredTask.subtasks.length} moons
                     </p>
                     <ul className="mt-1.5 space-y-1">
-                      {hoveredTask.subtasks.slice(0, 5).map((subtask) => (
+                      {hoveredTask.subtasks.slice(0, 4).map((subtask) => (
                         <li key={subtask.id} className="flex items-center gap-2 text-[12px]">
                           <NovaStar filled={subtask.done} size={10} />
                           <span className={subtask.done ? "text-slate-500 line-through" : "text-slate-200"}>
@@ -1694,9 +1701,9 @@ const GraphView: React.FC<GraphViewProps> = ({
                           </span>
                         </li>
                       ))}
-                      {hoveredTask.subtasks.length > 5 ? (
+                      {hoveredTask.subtasks.length > 4 ? (
                         <li className="text-[11px] text-slate-500">
-                          +{hoveredTask.subtasks.length - 5} more
+                          +{hoveredTask.subtasks.length - 4} more
                         </li>
                       ) : null}
                     </ul>

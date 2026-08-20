@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  electronShells,
-  hasRings,
   heliosOrbitPeriodMs,
   heliosPhase,
   heliosPosition,
@@ -9,8 +7,9 @@ import {
   moonOrbitAngle,
   orbitPeriodMs,
   planetScale,
-  RING_THRESHOLD,
+  moonShells,
   shellOf,
+  shellOrientation,
   subtaskHeaviness,
 } from "./orbitalMechanics";
 
@@ -86,47 +85,86 @@ describe("planetScale", () => {
   });
 });
 
-describe("hasRings", () => {
-  it("withholds rings below the threshold", () => {
-    expect(hasRings(RING_THRESHOLD - 1)).toBe(false);
+describe("moonShells", () => {
+  it("has no shells with nothing in orbit", () => {
+    expect(moonShells(0)).toEqual([]);
   });
 
-  it("grants rings at and above the threshold", () => {
-    expect(hasRings(RING_THRESHOLD)).toBe(true);
-    expect(hasRings(RING_THRESHOLD + 6)).toBe(true);
+  it("keeps a small count on one ring", () => {
+    expect(moonShells(1)).toEqual([1]);
+    expect(moonShells(3)).toEqual([3]);
+  });
+
+  it("splits evenly rather than stacking the inner ring", () => {
+    expect(moonShells(4)).toEqual([2, 2]);
+    expect(moonShells(6)).toEqual([3, 3]);
+    expect(moonShells(9)).toEqual([3, 3, 3]);
+    expect(moonShells(12)).toEqual([4, 4, 4]);
+  });
+
+  it("never lets two rings differ by more than one", () => {
+    for (const n of [5, 7, 8, 10, 11, 13, 20, 31]) {
+      const shells = moonShells(n);
+      expect(Math.max(...shells) - Math.min(...shells)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("always accounts for every moon", () => {
+    for (const n of [1, 4, 7, 15, 29, 60]) {
+      expect(moonShells(n).reduce((a, b) => a + b, 0)).toBe(n);
+    }
+  });
+
+  it("ignores nonsense counts", () => {
+    expect(moonShells(-3)).toEqual([]);
+    expect(moonShells(Number.NaN)).toEqual([]);
   });
 });
 
-describe("subtaskHeaviness", () => {
-  it("treats an empty subtask as weightless", () => {
-    expect(subtaskHeaviness("")).toBe(0);
-    expect(subtaskHeaviness(undefined)).toBe(0);
+describe("shellOf", () => {
+  it("maps each moon index to the shell holding it", () => {
+    // Six moons split [3, 3]: indices 0-2 inner, 3-5 outer.
+    expect(shellOf(0, 6)).toBe(0);
+    expect(shellOf(2, 6)).toBe(0);
+    expect(shellOf(3, 6)).toBe(1);
+    expect(shellOf(5, 6)).toBe(1);
   });
 
-  it("grows with how much the subtask says", () => {
-    expect(subtaskHeaviness("Ship it")).toBeLessThan(
-      subtaskHeaviness("Ship it once notarization clears and the dmg is stapled")
-    );
-  });
-
-  it("stays within 0..1 however long the text runs", () => {
-    const long = subtaskHeaviness("x".repeat(5000));
-    expect(long).toBeLessThanOrEqual(1);
-    expect(long).toBeGreaterThan(0.9);
+  it("keeps a lone moon on the inner shell", () => {
+    expect(shellOf(0, 1)).toBe(0);
   });
 });
 
-describe("moonOrbitAngle heaviness", () => {
-  it("turns a heavy moon more slowly than a weightless one", () => {
-    const period = orbitPeriodMs(3);
-    const light = moonOrbitAngle(0, 3, period, 0) - moonOrbitAngle(0, 3, 0, 0);
-    const heavy = moonOrbitAngle(0, 3, period, 1) - moonOrbitAngle(0, 3, 0, 1);
-    expect(heavy).toBeLessThan(light);
+describe("shellOrientation", () => {
+  it("juxtaposes the rings rather than stacking them flat", () => {
+    const a = shellOrientation(0);
+    const b = shellOrientation(1);
+    expect(a).not.toBeCloseTo(b, 3);
   });
 
-  it("still starts every moon from its own place on the ring", () => {
-    const gap = moonOrbitAngle(1, 4, 0, 0.8) - moonOrbitAngle(0, 4, 0, 0.8);
-    expect(gap).toBeCloseTo(Math.PI / 2, 6);
+  it("stands the second ring up against the first", () => {
+    // Roughly a quarter turn apart reads as vertical against horizontal.
+    const delta = Math.abs(shellOrientation(1) - shellOrientation(0));
+    expect(delta).toBeGreaterThan(Math.PI / 4);
+  });
+
+  it("is stable and finite for any shell", () => {
+    for (const i of [0, 1, 2, 3, 7, 40]) {
+      expect(Number.isFinite(shellOrientation(i))).toBe(true);
+      expect(shellOrientation(i)).toBe(shellOrientation(i));
+    }
+  });
+});
+
+describe("planetScale as an atom", () => {
+  it("separates sizes dramatically, the way planets actually differ", () => {
+    // A one-subtask world and a ten-subtask world should not look alike.
+    expect(planetScale(10) / planetScale(1)).toBeGreaterThan(1.7);
+  });
+
+  it("still never shrinks below its natural size", () => {
+    expect(planetScale(0)).toBe(1);
+    expect(planetScale(1)).toBeGreaterThan(1);
   });
 });
 
@@ -182,71 +220,43 @@ describe("heliosPosition", () => {
     expect(b.y).toBeCloseTo(a.y, 4);
   });
 
-  it("moves a light task further around than a heavy one in the same time", () => {
-    const light = heliosPosition("t1", "TO-DO", 5000, 0);
-    const heavy = heliosPosition("t1", "TO-DO", 5000, 9);
-    const start = heliosPosition("t1", "TO-DO", 0, 0);
-    const angleOf = (p: { x: number; y: number }) => Math.atan2(p.y, p.x);
-    const travelled = (p: { x: number; y: number }) =>
-      Math.abs(angleOf(p) - angleOf(start));
-    expect(travelled(light)).toBeGreaterThan(travelled(heavy));
-  });
-});
-
-describe("electronShells", () => {
-  it("has no shells with nothing in orbit", () => {
-    expect(electronShells(0)).toEqual([]);
-  });
-
-  it("fills the inner shell first, two at a time", () => {
-    expect(electronShells(1)).toEqual([1]);
-    expect(electronShells(2)).toEqual([2]);
-  });
-
-  it("opens a second shell once the first is full", () => {
-    expect(electronShells(3)).toEqual([2, 1]);
-    expect(electronShells(10)).toEqual([2, 8]);
-  });
-
-  it("opens a third shell after that", () => {
-    expect(electronShells(12)).toEqual([2, 8, 2]);
-  });
-
-  it("always accounts for every moon", () => {
-    for (const n of [1, 4, 7, 15, 29, 60]) {
-      const shells = electronShells(n);
-      expect(shells.reduce((a, b) => a + b, 0)).toBe(n);
+  it("spaces planets that share a ring evenly around it", () => {
+    const total = 4;
+    const angles = Array.from({ length: total }, (_, i) =>
+      heliosPosition(`t${i}`, "TO-DO", 0, 0, { index: i, total })
+    ).map((p) => Math.atan2(p.y, p.x));
+    // No two planets should end up sitting on top of one another.
+    for (let i = 0; i < angles.length; i += 1) {
+      for (let j = i + 1; j < angles.length; j += 1) {
+        const gap = Math.abs(angles[i] - angles[j]) % (Math.PI * 2);
+        expect(Math.min(gap, Math.PI * 2 - gap)).toBeGreaterThan(0.3);
+      }
     }
   });
-
-  it("ignores nonsense counts", () => {
-    expect(electronShells(-3)).toEqual([]);
-    expect(electronShells(Number.NaN)).toEqual([]);
-  });
 });
 
-describe("shellOf", () => {
-  it("maps each moon index to the shell holding it", () => {
-    // Five moons fill [2, 3]: indices 0-1 inner, 2-4 outer.
-    expect(shellOf(0, 5)).toBe(0);
-    expect(shellOf(1, 5)).toBe(0);
-    expect(shellOf(2, 5)).toBe(1);
-    expect(shellOf(4, 5)).toBe(1);
+describe("subtaskHeaviness", () => {
+  it("treats an empty subtask as weightless", () => {
+    expect(subtaskHeaviness("")).toBe(0);
+    expect(subtaskHeaviness(undefined)).toBe(0);
   });
 
-  it("keeps a lone moon on the inner shell", () => {
-    expect(shellOf(0, 1)).toBe(0);
-  });
-});
-
-describe("planetScale as an atom", () => {
-  it("separates sizes dramatically, the way planets actually differ", () => {
-    // A one-subtask world and a ten-subtask world should not look alike.
-    expect(planetScale(10) / planetScale(1)).toBeGreaterThan(1.7);
+  it("grows with how much the subtask says", () => {
+    expect(subtaskHeaviness("Ship it")).toBeLessThan(
+      subtaskHeaviness("Ship it once notarization clears and the dmg is stapled")
+    );
   });
 
-  it("still never shrinks below its natural size", () => {
-    expect(planetScale(0)).toBe(1);
-    expect(planetScale(1)).toBeGreaterThan(1);
+  it("stays within 0..1 however long the text runs", () => {
+    const long = subtaskHeaviness("x".repeat(5000));
+    expect(long).toBeLessThanOrEqual(1);
+    expect(long).toBeGreaterThan(0.9);
+  });
+
+  it("turns a heavy moon more slowly than a weightless one", () => {
+    const period = orbitPeriodMs(3);
+    const light = moonOrbitAngle(0, 3, period, 0) - moonOrbitAngle(0, 3, 0, 0);
+    const heavy = moonOrbitAngle(0, 3, period, 1) - moonOrbitAngle(0, 3, 0, 1);
+    expect(heavy).toBeLessThan(light);
   });
 });

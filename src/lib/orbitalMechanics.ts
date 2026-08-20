@@ -32,9 +32,6 @@ const HELIOS_BASE_PERIOD_MS = 48_000;
 const HELIOS_PERIOD_PER_SUBTASK_MS = 9_000;
 const HELIOS_MAX_PERIOD_MS = 150_000;
 
-/** Subtasks at which a planet earns rings. */
-export const RING_THRESHOLD = 5;
-
 /** Growth per subtask, and the ceiling on that growth. */
 const SCALE_GROWTH = 0.36;
 const SCALE_CURVE = 0.7;
@@ -127,32 +124,28 @@ export const planetScale = (count: number): number => {
   return Math.min(MAX_SCALE, 1 + SCALE_GROWTH * Math.pow(counted, SCALE_CURVE));
 };
 
-/** Electron capacity per shell, inner to outer. */
-const SHELL_CAPACITIES = [2, 8, 18, 32];
+/** Most moons we will put on a single ring before opening another. */
+const PER_SHELL_TARGET = 3;
+const MAX_SHELLS = 3;
 
 /**
- * How the moons distribute into shells, inner first, the way electrons fill
- * an atom. Five moons sit as [2, 3]; twelve as [2, 8, 2].
+ * How the moons split across rings. Rings are balanced rather than filled
+ * inner-first: six moons sit as [3, 3], not [2, 4]. Two rings never differ by
+ * more than one, so the system reads as deliberate rather than as leftovers.
  */
-export const electronShells = (count: number): number[] => {
+export const moonShells = (count: number): number[] => {
   if (!Number.isFinite(count) || count <= 0) return [];
-  let left = Math.floor(count);
-  const shells: number[] = [];
-  let i = 0;
-  while (left > 0) {
-    // Past the known capacities, keep widening rather than stopping.
-    const capacity = SHELL_CAPACITIES[i] ?? SHELL_CAPACITIES[SHELL_CAPACITIES.length - 1];
-    const take = Math.min(capacity, left);
-    shells.push(take);
-    left -= take;
-    i += 1;
-  }
-  return shells;
+  const total = Math.floor(count);
+  const shellCount = Math.max(1, Math.min(MAX_SHELLS, Math.ceil(total / PER_SHELL_TARGET)));
+  const base = Math.floor(total / shellCount);
+  const remainder = total % shellCount;
+  // The remainder goes to the inner rings, so any odd one out sits closest in.
+  return Array.from({ length: shellCount }, (_, i) => base + (i < remainder ? 1 : 0));
 };
 
-/** Which shell a given moon belongs to. */
+/** Which ring a given moon belongs to. */
 export const shellOf = (index: number, count: number): number => {
-  const shells = electronShells(count);
+  const shells = moonShells(count);
   let seen = 0;
   for (let i = 0; i < shells.length; i += 1) {
     seen += shells[i];
@@ -161,9 +154,17 @@ export const shellOf = (index: number, count: number): number => {
   return Math.max(0, shells.length - 1);
 };
 
-/** Whether a planet is heavy enough to have collected a ring system. */
-export const hasRings = (count: number): boolean =>
-  Number.isFinite(count) && count >= RING_THRESHOLD;
+/**
+ * The plane each ring rides in, radians. Horizontal, then stood upright
+ * against it, then cocked between the two -- the juxtaposition is what makes
+ * a busy task look like a structure rather than a stack of hoops.
+ */
+const SHELL_ORIENTATIONS = [0, Math.PI / 2, Math.PI / 4, -Math.PI / 3];
+
+export const shellOrientation = (shell: number): number => {
+  const i = Number.isFinite(shell) ? Math.abs(Math.floor(shell)) : 0;
+  return SHELL_ORIENTATIONS[i % SHELL_ORIENTATIONS.length];
+};
 
 /**
  * A stable starting angle for a task, hashed from its id. Nothing is stored --
