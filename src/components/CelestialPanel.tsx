@@ -39,10 +39,6 @@ const CelestialPanel = () => {
           Randomize
         </button>
       </div>
-      <p className="mt-1.5 text-xs text-slate-500">
-        Each column flies a body. Its colour carries to the board title and the
-        galaxy alike.
-      </p>
 
       <div className="mt-4 space-y-4">
         {STATUS_KEYS.map((status) => {
@@ -113,10 +109,6 @@ const CelestialPanel = () => {
             Glow
           </button>
         </div>
-        <p className="mt-1 text-xs text-slate-500">
-          What a subtask is made of, and what it burns. The body and its glow
-          are separate colours; the glow can be switched off for flat bodies.
-        </p>
         <div className="mt-3 grid grid-cols-3 gap-2">
           {STATUS_KEYS.map((status) => {
             const glow = moonGlowTintForStatus(prefs, status);
@@ -171,9 +163,6 @@ const CelestialPanel = () => {
             {sunById(prefs.sun).label}
           </span>
         </div>
-        <p className="mt-1 text-xs text-slate-500">
-          What burns at the centre.
-        </p>
         <div role="group" aria-label="Sun" className="mt-2 flex flex-wrap gap-1.5">
           {SUNS.map((sun) => {
             const selected = sun.id === prefs.sun;
@@ -205,9 +194,6 @@ const CelestialPanel = () => {
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">
               Subtask
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              What a finished subtask burns on the chip.
             </p>
           </div>
           <span className="inline-flex items-center gap-0.5">

@@ -41,6 +41,18 @@ export interface Task {
   clusterId?: string;
 }
 
+/** When the board was last written by something that is not this app. */
+export const EXTERNAL_KEY = "flowstate:v1:external-seen";
+export const EXTERNAL_EVENT = "flowstate:external-change";
+
+/** Reads that stamp back. Null when nothing has ever reached the board. */
+export const lastExternalChange = (): number | null => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(EXTERNAL_KEY);
+  const at = raw === null ? Number.NaN : Number(raw);
+  return Number.isFinite(at) ? at : null;
+};
+
 /** Stamps a task as changed now. Use at every mutation site. */
 export const touchTask = (task: Task, now: number = Date.now()): Task => ({
   ...task,
@@ -137,6 +149,15 @@ export const useLocalTasks = (
       .watch((next) => {
         setTasks(next.tasks);
         setClusters(next.clusters);
+        // Something outside this app wrote the board. That is the only honest
+        // evidence an assistant is connected -- there is no handshake to
+        // observe, just work arriving from somewhere else.
+        try {
+          window.localStorage.setItem(EXTERNAL_KEY, String(Date.now()));
+        } catch {
+          // Private browsing and quota failures are not worth breaking over.
+        }
+        window.dispatchEvent(new CustomEvent(EXTERNAL_EVENT));
         window.dispatchEvent(
           new CustomEvent("flowstate:toast", {
             detail: { message: "Board updated from outside.", variant: "success" },

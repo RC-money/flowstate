@@ -12,21 +12,14 @@ interface ConnectPanelProps {
 const BOARD_FILE = "~/Library/Application Support/com.flowstate.app/tasks.json";
 
 /**
- * Where the packaged app puts the server.
+ * Where the packaged app puts the MCP server, for the assistants that can
+ * speak it. Named here rather than in a set of per-client config blocks: which
+ * clients exist, and what their config looks like, changes faster than this
+ * app will. The assistant reading the prompt knows its own client; we do not.
  *
- * One constant, because these snippets are copied and pasted: if this and what
- * the bundle actually ships ever disagree, every instruction on this screen is
- * wrong at once. Keep it in step with `resources` in tauri.conf.json.
+ * Keep in step with `resources` in tauri.conf.json.
  */
 const SERVER_PATH = "/Applications/Flowstate.app/Contents/Resources/mcp/server.js";
-
-interface Recipe {
-  id: string;
-  client: string;
-  /** One line saying where this goes, in the client's own vocabulary. */
-  where: string;
-  snippet: string;
-}
 
 /**
  * For every assistant that cannot speak MCP but can open a file -- which is
@@ -75,44 +68,15 @@ Rules, all of which matter:
 Only ever change clusters and tasks. Do not touch any other file, and do not
 add fields of your own.
 
+If you can speak MCP, there is a server that does all of the above for you,
+with undo, at:
+${SERVER_PATH}
+Work out how your own client is configured for MCP servers and walk me through
+adding it — you know your setup better than this note does. If you cannot, the
+file above is enough.
+
 Tell me what you changed in one line. Start by reading the file and telling me
 what is open.`;
-
-const RECIPES: Recipe[] = [
-  {
-    id: "claude-code",
-    client: "Claude Code",
-    where: "Run this once, anywhere:",
-    snippet: `claude mcp add flowstate -- node ${SERVER_PATH}`,
-  },
-  {
-    id: "claude-desktop",
-    client: "Claude Desktop",
-    where: "Settings → Developer → Edit Config, then add:",
-    snippet: `{
-  "mcpServers": {
-    "flowstate": {
-      "command": "node",
-      "args": ["${SERVER_PATH}"]
-    }
-  }
-}`,
-  },
-  {
-    id: "codex",
-    client: "Codex",
-    where: "In ~/.codex/config.toml:",
-    snippet: `[mcp_servers.flowstate]
-command = "node"
-args = ["${SERVER_PATH}"]`,
-  },
-  {
-    id: "any-ai",
-    client: "Any other AI",
-    where: "No MCP? Paste this into anything that can read and write files:",
-    snippet: HANDOVER_PROMPT,
-  },
-];
 
 /** What it can do once connected, in the order someone would try them. */
 const ABILITIES = [
@@ -123,7 +87,7 @@ const ABILITIES = [
 ];
 
 export default function ConnectPanel({ open, onClose }: ConnectPanelProps) {
-  const [copied, setCopied] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const close = useCallback(() => onClose(), [onClose]);
 
@@ -139,13 +103,13 @@ export default function ConnectPanel({ open, onClose }: ConnectPanelProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, close]);
 
-  const copy = async (recipe: Recipe) => {
+  const copyPrompt = async () => {
     try {
-      await navigator.clipboard.writeText(recipe.snippet);
-      setCopied(recipe.id);
-      window.setTimeout(() => setCopied(null), 1600);
+      await navigator.clipboard.writeText(HANDOVER_PROMPT);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Clipboard can be refused; the snippet is on screen to select by hand.
+      // Clipboard can be refused; the prompt is on screen to select by hand.
     }
   };
 
@@ -174,7 +138,7 @@ export default function ConnectPanel({ open, onClose }: ConnectPanelProps) {
               Connect your AI
             </p>
             <p className="mt-1.5 text-xs text-slate-500">
-              Let Claude, Codex or any MCP client run your board. It reads and
+              Hand your board to whatever AI you already use. It reads and
               writes the same file this app does — on your machine, with no
               server and no account in between.
             </p>
@@ -202,38 +166,45 @@ export default function ConnectPanel({ open, onClose }: ConnectPanelProps) {
               </li>
             ))}
           </ul>
-          {/* The gate, stated as a promise rather than a limitation. */}
+          {/* Two different promises, and they are not equally strong. Saying
+              "no model can touch them" of the file path would be a claim this
+              app cannot keep -- anything with filesystem access can read
+              anything. Only the MCP path is enforced by construction. */}
           <p className="mt-3 text-xs text-slate-500">
-            And nothing else. It cannot reach your colours, your galaxy, your
-            intent surface or your journal — there is no tool for them, so no
-            model can touch them. Every change it makes is undoable.
+            And nothing else. Over MCP that is enforced, not requested: there is
+            no tool for your colours, your galaxy, your intent surface or your
+            journal, so nothing can reach them. Every change is undoable.
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Handing over the file instead asks rather than enforces — the prompt
+            tells your assistant to touch nothing else, and an assistant with
+            access to your disk is trusted the same way any editor is.
           </p>
         </div>
 
-        <div className="mt-4 space-y-3">
-          {RECIPES.map((recipe) => (
-            <div
-              key={recipe.id}
-              className="rounded-2xl border border-white/10 bg-[#050B18]/70 p-4"
+        {/* One prompt, not a list of clients. Which assistants exist and how
+            each is configured changes faster than this app will, and the one
+            reading it knows its own setup better than we could. */}
+        <div className="mt-4 rounded-2xl border border-white/10 bg-[#050B18]/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Hand this to your AI
+            </p>
+            <button
+              type="button"
+              onClick={copyPrompt}
+              className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/40 hover:bg-white/5"
             >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
-                  {recipe.client}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => copy(recipe)}
-                  className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/40 hover:bg-white/5"
-                >
-                  {copied === recipe.id ? "Copied" : "Copy"}
-                </button>
-              </div>
-              <p className="mt-1 text-[11px] text-slate-500">{recipe.where}</p>
-              <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[#c9d0ff]">
-                {recipe.snippet}
-              </pre>
-            </div>
-          ))}
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Paste it into whatever you already use. It explains the board, and
+            it will walk you through connecting properly if your assistant can.
+          </p>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[#c9d0ff]">
+            {HANDOVER_PROMPT}
+          </pre>
         </div>
 
         <p className="mt-4 text-xs text-slate-500">

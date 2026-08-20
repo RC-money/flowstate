@@ -97,9 +97,6 @@ const MusicPanel: React.FC<MusicPanelProps> = ({
         Shuffle
       </button>
     </div>
-    <p className="mt-1.5 text-xs text-slate-500">
-      Pick a song to loop it, or shuffle to let them play.
-    </p>
     <ul className="mt-3 space-y-2">
       {tracks.map((track) => {
         const isPlaying = playingSrc === track.src;

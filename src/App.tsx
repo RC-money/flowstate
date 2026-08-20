@@ -47,6 +47,7 @@ const MUSIC_TRACKS: MusicTrack[] = [
 ];
 import CommandPalette, { type Command } from "./components/CommandPalette";
 import ConnectPanel from "./components/ConnectPanel";
+import ConnectedPill from "./components/ConnectedPill";
 import Welcome from "./components/Welcome";
 import { shouldShowWelcome } from "./lib/storage/firstRun";
 import { ToastProvider, useToast } from "./components/Toast";
@@ -1155,14 +1156,18 @@ function AppShell() {
         <CelestialPanel />
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+            MCP
+          </p>
+          <div className="mt-3">
+            <ConnectedPill onConnect={() => setConnectOpen(true)} />
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
             Your data
           </p>
-          <p className="mt-1.5 text-xs text-slate-500">
-            Everything lives on this machine. Export is a plain JSON file — it is
-            the whole board.
-          </p>
-          {/* The buttons live in the palette, not here as well. This says the
-              thing that needed saying; ⌘K does the thing. */}
+          {/* The buttons live in the palette, not here as well. */}
           <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[#4d587a]">
             Export and import are in &#8984;K
           </p>
