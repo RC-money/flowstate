@@ -1,5 +1,6 @@
 import { touchTask, type Task } from "../../hooks/useLocalTasks";
 import { isLive, type Cluster } from "../clusters/clusters";
+import { DEFAULT_COLUMNS } from "../columns/columns";
 import { stampCompletion } from "../earnedStars";
 import { decayLevel } from "../orbitalDecay";
 import { resolve, resolveCluster } from "./resolve";
@@ -103,6 +104,10 @@ export const run = (
   const replace = (id: string, change: (task: Task) => Task): Task[] =>
     tasks.map((task) => (task.id === id ? change(task) : task));
 
+  /** The board this task lives on, which is what says where its finish line is. */
+  const columnsFor = (task: Task) =>
+    clusters?.find((cluster) => cluster.id === task.clusterId)?.columns ?? DEFAULT_COLUMNS;
+
   switch (command.kind) {
     case "move":
       return withTarget(command.target, (task) => {
@@ -111,7 +116,10 @@ export const run = (
         }
         const next = replace(task.id, (current) =>
           touchTask(
-            { ...stampCompletion(current, command.to, now), status: command.to },
+            {
+              ...stampCompletion(current, command.to, now, columnsFor(current)),
+              status: command.to,
+            },
             now
           )
         );

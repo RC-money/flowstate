@@ -5,7 +5,12 @@ import { DEFAULT_CLUSTER_NAME, makeCluster, type Cluster } from "../lib/clusters
 import { normalizeDates } from "../lib/taskDates";
 import { normalizeSubtasks, type Subtask } from "../lib/subtasks";
 
-export type TaskStatus = "TO-DO" | "IN PROGRESS" | "DONE";
+/**
+ * A column id. Boards ship with "TO-DO" / "IN PROGRESS" / "DONE" and may add,
+ * rename and reorder their own, so this is a string rather than a union -- the
+ * cluster's `columns` are what say which ids are real.
+ */
+export type TaskStatus = string;
 export interface Task {
   id: string;
   title: string;
@@ -51,9 +56,7 @@ const isTask = (candidate: unknown): candidate is Task => {
     typeof (candidate as Task).id === "string" &&
     typeof (candidate as Task).title === "string" &&
     typeof (candidate as Task).status === "string" &&
-    ((candidate as Task).status === "TO-DO" ||
-      (candidate as Task).status === "IN PROGRESS" ||
-      (candidate as Task).status === "DONE")
+    (candidate as Task).status.length > 0
   );
 };
 

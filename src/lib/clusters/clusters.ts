@@ -1,4 +1,5 @@
 import type { Task } from "../../hooks/useLocalTasks";
+import { DEFAULT_COLUMNS, isTerminal, type Column } from "../columns/columns";
 
 /**
  * A cluster is one project: its own three-column board, its own sky.
@@ -12,6 +13,8 @@ export interface Cluster {
   id: string;
   name: string;
   createdAt: number;
+  /** This project's own board. Its last column is the finish line. */
+  columns: Column[];
   /** Epoch ms. Sent to the ether: off the board, out in the deep field. */
   etheredAt?: number;
 }
@@ -23,6 +26,7 @@ export const makeCluster = (name: string, now: number, id: string): Cluster => (
   id,
   name: name.trim() || DEFAULT_CLUSTER_NAME,
   createdAt: now,
+  columns: DEFAULT_COLUMNS.map((column) => ({ ...column })),
 });
 
 export const isLive = (cluster: Cluster): boolean => cluster.etheredAt === undefined;
@@ -37,15 +41,18 @@ export const tasksInCluster = (tasks: Task[], clusterId: string): Task[] =>
 /**
  * Whether a cluster has earned its ending.
  *
- * Every task has to be done or already gone, and there has to be at least one
- * -- an empty cluster never earned anything. A task parked in the Dark Forest
- * counts as unfinished on purpose: hiding work is not the same as ending it.
+ * Every task has to have reached the last column or already gone, and there has
+ * to be at least one -- an empty cluster never earned anything. A task parked
+ * in the Dark Forest counts as unfinished on purpose: hiding work is not the
+ * same as ending it.
  */
-export const canEther = (tasks: Task[], clusterId: string): boolean => {
-  const members = tasksInCluster(tasks, clusterId);
+export const canEther = (tasks: Task[], cluster: Cluster): boolean => {
+  const members = tasksInCluster(tasks, cluster.id);
   if (members.length === 0) return false;
   return members.every(
-    (task) => !task.darkForest && (task.status === "DONE" || task.etheredAt !== undefined)
+    (task) =>
+      !task.darkForest &&
+      (isTerminal(cluster.columns, task.status) || task.etheredAt !== undefined)
   );
 };
 

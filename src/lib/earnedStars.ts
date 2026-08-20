@@ -1,4 +1,5 @@
 import type { Task, TaskStatus } from "../hooks/useLocalTasks";
+import { isTerminal, type Column } from "./columns/columns";
 import { hash32, unit } from "./hash";
 
 /**
@@ -24,12 +25,20 @@ const FULL_BRIGHTNESS_DAYS = 30;
 const MIN_BRIGHTNESS = 0.35;
 
 /**
- * Stamps or clears completedAt for a status transition. Entering DONE earns
- * the timestamp once; leaving DONE surrenders it -- the sky only shows work
- * that is actually finished.
+ * Stamps or clears completedAt for a status transition. Reaching the board's
+ * last column earns the timestamp once; leaving it surrenders it -- the sky
+ * only shows work that is actually finished.
+ *
+ * The finish line is the last column, whatever the user named it, so a board
+ * ending in "Shipped" or "Verified" earns its stars exactly the same way.
  */
-export const stampCompletion = (task: Task, nextStatus: TaskStatus, now: number): Task => {
-  if (nextStatus === "DONE") {
+export const stampCompletion = (
+  task: Task,
+  nextStatus: TaskStatus,
+  now: number,
+  columns: Column[]
+): Task => {
+  if (isTerminal(columns, nextStatus)) {
     return task.completedAt ? task : { ...task, completedAt: now };
   }
   if (task.completedAt === undefined) return task;
@@ -41,9 +50,10 @@ export const stampCompletion = (task: Task, nextStatus: TaskStatus, now: number)
 export const deriveStars = (tasks: Task[]): EarnedStar[] => {
   const stars: EarnedStar[] = [];
   for (const task of tasks) {
-    // completedAt, not status: legacy DONE tasks without a stamp earn their
-    // star the next time they are touched rather than appearing retroactively.
-    if (task.status !== "DONE" || task.completedAt === undefined) continue;
+    // completedAt alone, not the column: it is stamped on reaching the last
+    // column and cleared on leaving it, and it is the only thing that still
+    // means "finished" once a board renames or reorders its columns.
+    if (task.completedAt === undefined) continue;
 
     const lifespanDays = Math.max(0, task.completedAt - task.createdAt) / DAY;
     let brightness =

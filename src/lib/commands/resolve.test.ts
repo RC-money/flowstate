@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { resolve, resolveCluster } from "./resolve";
+import { DEFAULT_COLUMNS } from "../columns/columns";
 import type { Task } from "../../hooks/useLocalTasks";
 
 const NOW = 1_755_500_000_000;
@@ -58,9 +59,9 @@ describe("resolve", () => {
 
 describe("resolveCluster", () => {
   const clusters = [
-    { id: "c_1", name: "Flowstate v2", createdAt: 1 },
-    { id: "c_2", name: "Gardening", createdAt: 2 },
-    { id: "c_3", name: "Gone", createdAt: 3, etheredAt: 4 },
+    { id: "c_1", name: "Flowstate v2", createdAt: 1, columns: DEFAULT_COLUMNS },
+    { id: "c_2", name: "Gardening", createdAt: 2, columns: DEFAULT_COLUMNS },
+    { id: "c_3", name: "Gone", createdAt: 3, columns: DEFAULT_COLUMNS, etheredAt: 4 },
   ];
 
   test("matches a cluster by name", () => {
@@ -85,8 +86,8 @@ describe("resolveCluster", () => {
 
   test("refuses rather than guessing between two equal matches", () => {
     const twins = [
-      { id: "c_1", name: "Launch", createdAt: 1 },
-      { id: "c_2", name: "Launch", createdAt: 2 },
+      { id: "c_1", name: "Launch", createdAt: 1, columns: DEFAULT_COLUMNS },
+      { id: "c_2", name: "Launch", createdAt: 2, columns: DEFAULT_COLUMNS },
     ];
     const found = resolveCluster("launch", twins);
     expect(found.kind).toBe("ambiguous");

@@ -61,6 +61,7 @@ import {
   tasksInCluster,
 } from "./lib/clusters/clusters";
 import ClusterSwitcher from "./components/ClusterSwitcher";
+import { DEFAULT_COLUMNS } from "./lib/columns/columns";
 import { stampCompletion } from "./lib/earnedStars";
 import { appendLogEvent } from "./lib/taskLog";
 import IntentSurface from "./components/IntentSurface";
@@ -217,9 +218,18 @@ function AppShell() {
     });
     return counts;
   }, [tasks]);
+  const activeCluster = useMemo(
+    () => liveClusterList.find((cluster) => cluster.id === activeClusterId) ?? null,
+    [liveClusterList, activeClusterId]
+  );
+  // The board's own columns. Its last one is the finish line.
+  const activeColumns = useMemo(
+    () => activeCluster?.columns ?? DEFAULT_COLUMNS,
+    [activeCluster]
+  );
   const activeCanEther = useMemo(
-    () => (activeClusterId ? canEther(tasks, activeClusterId) : false),
-    [tasks, activeClusterId]
+    () => (activeCluster ? canEther(tasks, activeCluster) : false),
+    [tasks, activeCluster]
   );
   const etherealTasks = useMemo(
     () => clusterTasks.filter((task) => task.etheredAt !== undefined),
@@ -387,7 +397,14 @@ function AppShell() {
       setTasks((prev) =>
         prev.map((task) =>
           task.id === taskId
-            ? touchTask(stampCompletion({ ...task, status: nextStatus }, nextStatus, Date.now()))
+            ? touchTask(
+                stampCompletion(
+                  { ...task, status: nextStatus },
+                  nextStatus,
+                  Date.now(),
+                  activeColumns
+                )
+              )
             : task
         )
       );
@@ -458,12 +475,14 @@ function AppShell() {
   const handleSaveTask = useCallback(
     (task: Task) => {
       setTasks((prev) => {
-        const stamped = stampCompletion(task, task.status, Date.now());
+        const stamped = stampCompletion(task, task.status, Date.now(), activeColumns);
         if (modalMode === "new") {
           return [...prev, { ...stamped, clusterId: activeClusterId ?? stamped.clusterId }];
         }
         return prev.map((t) =>
-          t.id === task.id ? stampCompletion({ ...t, ...task }, task.status, Date.now()) : t
+          t.id === task.id
+            ? stampCompletion({ ...t, ...task }, task.status, Date.now(), activeColumns)
+            : t
         );
       });
       setActiveTask(task);
@@ -486,7 +505,7 @@ function AppShell() {
       }
       closeModal();
     },
-    [modalMode, closeModal, pushToast, tasksById, activeClusterId]
+    [modalMode, closeModal, pushToast, tasksById, activeClusterId, activeColumns]
   );
 
   useEffect(() => {
@@ -566,7 +585,7 @@ function AppShell() {
     const cluster = clusters.find((entry) => entry.id === activeClusterId);
     // Guarded here as well as in the UI: nothing should be able to end a
     // project that still has work in it.
-    if (!cluster || !canEther(tasks, activeClusterId)) return;
+    if (!cluster || !canEther(tasks, cluster)) return;
     setClusters((prev) => etherCluster(prev, activeClusterId, Date.now()));
     pushToast(`"${cluster.name}" is a galaxy now.`, "success");
   }, [activeClusterId, clusters, tasks, pushToast, setClusters]);

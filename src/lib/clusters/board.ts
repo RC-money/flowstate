@@ -1,4 +1,5 @@
 import { coerceTasks, type Task } from "../../hooks/useLocalTasks";
+import { coerceColumns } from "../columns/columns";
 import { DEFAULT_CLUSTER_NAME, isLive, makeCluster, type Cluster } from "./clusters";
 
 export { DEFAULT_CLUSTER_NAME };
@@ -40,6 +41,7 @@ const coerceCluster = (value: unknown, now: number): Cluster | null => {
     id,
     name: name || DEFAULT_CLUSTER_NAME,
     createdAt,
+    columns: coerceColumns(row.columns),
     ...(etheredAt !== undefined ? { etheredAt } : {}),
   };
 };
@@ -89,7 +91,7 @@ export const normalizeBoard = (payload: unknown, now: number): Board | null => {
       const id = task.clusterId;
       if (typeof id !== "string" || !id || seen.has(id)) return;
       seen.add(id);
-      clusters.push({ id, name: DEFAULT_CLUSTER_NAME, createdAt: now });
+      clusters.push({ ...makeCluster(DEFAULT_CLUSTER_NAME, now, id) });
     });
   }
 

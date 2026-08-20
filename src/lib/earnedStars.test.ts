@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { stampCompletion, deriveStars } from "./earnedStars";
+import { DEFAULT_COLUMNS } from "./columns/columns";
 import type { Task } from "../hooks/useLocalTasks";
 
 const NOW = 1_755_500_000_000;
@@ -16,22 +17,22 @@ const task = (over: Partial<Task>): Task => ({
 
 describe("stampCompletion", () => {
   test("stamps completedAt when a task enters DONE", () => {
-    const next = stampCompletion(task({}), "DONE", NOW);
+    const next = stampCompletion(task({}), "DONE", NOW, DEFAULT_COLUMNS);
     expect(next.completedAt).toBe(NOW);
   });
 
   test("keeps the original completedAt when already DONE", () => {
     const done = task({ status: "DONE", completedAt: NOW - DAY });
-    expect(stampCompletion(done, "DONE", NOW).completedAt).toBe(NOW - DAY);
+    expect(stampCompletion(done, "DONE", NOW, DEFAULT_COLUMNS).completedAt).toBe(NOW - DAY);
   });
 
   test("clears completedAt when a task leaves DONE", () => {
     const done = task({ status: "DONE", completedAt: NOW - DAY });
-    expect(stampCompletion(done, "IN PROGRESS", NOW).completedAt).toBeUndefined();
+    expect(stampCompletion(done, "IN PROGRESS", NOW, DEFAULT_COLUMNS).completedAt).toBeUndefined();
   });
 
   test("leaves non-DONE transitions unstamped", () => {
-    expect(stampCompletion(task({}), "IN PROGRESS", NOW).completedAt).toBeUndefined();
+    expect(stampCompletion(task({}), "IN PROGRESS", NOW, DEFAULT_COLUMNS).completedAt).toBeUndefined();
   });
 });
 

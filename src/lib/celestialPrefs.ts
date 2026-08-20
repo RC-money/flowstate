@@ -6,7 +6,12 @@
  * the galaxy rather than an approximation someone picked by eye.
  */
 
-export type StatusKey = "TO-DO" | "IN PROGRESS" | "DONE";
+/**
+ * A column id. The three defaults have their own skins; a column the user
+ * added falls back to a skin chosen from its own id, so every board is
+ * dressed whatever it is called.
+ */
+export type StatusKey = string;
 
 export const STATUS_KEYS: readonly StatusKey[] = ["TO-DO", "IN PROGRESS", "DONE"];
 
@@ -112,10 +117,12 @@ export const normalizeCelestialPrefs = (raw: unknown): CelestialPrefs => {
 };
 
 export const accentForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
-  skinById(prefs.statusSkins[status]).accent;
+  skinById(prefs.statusSkins[status] ?? SKINS[0].id).accent;
 
 export const moonTintForStatus = (prefs: CelestialPrefs, status: StatusKey): string =>
-  prefs.moonTints[status] ?? DEFAULT_CELESTIAL_PREFS.moonTints[status];
+  prefs.moonTints[status] ??
+  DEFAULT_CELESTIAL_PREFS.moonTints[status] ??
+  DEFAULT_CELESTIAL_PREFS.starColor;
 
 const pick = <T,>(items: readonly T[], random: () => number): T =>
   items[Math.min(items.length - 1, Math.floor(random() * items.length))];

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../../hooks/useLocalTasks";
+import { DEFAULT_COLUMNS } from "../columns/columns";
 import {
   DEFAULT_CLUSTER_NAME,
   canEther,
@@ -13,6 +14,13 @@ import {
 } from "./clusters";
 
 const NOW = 1_700_000_000_000;
+
+const cluster = (id: string, columns = DEFAULT_COLUMNS): Cluster => ({
+  id,
+  name: id,
+  createdAt: NOW,
+  columns,
+});
 
 const task = (over: Partial<Task> & { id: string; clusterId: string }): Task => ({
   title: over.id,
@@ -30,6 +38,7 @@ describe("makeCluster", () => {
       id: "c_1",
       name: "Flowstate v2",
       createdAt: NOW,
+      columns: DEFAULT_COLUMNS,
     });
   });
 
@@ -50,9 +59,9 @@ describe("isLive", () => {
 describe("liveClusters", () => {
   it("keeps the live ones in creation order", () => {
     const clusters: Cluster[] = [
-      { id: "c_2", name: "Second", createdAt: NOW + 10 },
-      { id: "c_1", name: "First", createdAt: NOW },
-      { id: "c_0", name: "Gone", createdAt: NOW - 10, etheredAt: NOW },
+      { id: "c_2", name: "Second", createdAt: NOW + 10, columns: DEFAULT_COLUMNS },
+      { id: "c_1", name: "First", createdAt: NOW, columns: DEFAULT_COLUMNS },
+      { id: "c_0", name: "Gone", createdAt: NOW - 10, columns: DEFAULT_COLUMNS, etheredAt: NOW },
     ];
 
     expect(liveClusters(clusters).map((c) => c.id)).toEqual(["c_1", "c_2"]);
@@ -78,7 +87,7 @@ describe("canEther", () => {
       task({ id: "b", clusterId: "c_1", status: "IN PROGRESS" }),
     ];
 
-    expect(canEther(tasks, "c_1")).toBe(false);
+    expect(canEther(tasks, cluster("c_1"))).toBe(false);
   });
 
   it("allows a cluster whose tasks are all done", () => {
@@ -87,7 +96,7 @@ describe("canEther", () => {
       task({ id: "b", clusterId: "c_1", status: "DONE" }),
     ];
 
-    expect(canEther(tasks, "c_1")).toBe(true);
+    expect(canEther(tasks, cluster("c_1"))).toBe(true);
   });
 
   it("counts an already-ethered task as finished", () => {
@@ -96,7 +105,7 @@ describe("canEther", () => {
       task({ id: "b", clusterId: "c_1", status: "TO-DO", etheredAt: NOW }),
     ];
 
-    expect(canEther(tasks, "c_1")).toBe(true);
+    expect(canEther(tasks, cluster("c_1"))).toBe(true);
   });
 
   it("counts a task hidden in the Dark Forest as unfinished", () => {
@@ -105,11 +114,11 @@ describe("canEther", () => {
       task({ id: "b", clusterId: "c_1", status: "TO-DO", darkForest: true }),
     ];
 
-    expect(canEther(tasks, "c_1")).toBe(false);
+    expect(canEther(tasks, cluster("c_1"))).toBe(false);
   });
 
   it("refuses an empty cluster -- the ceremony has to be earned", () => {
-    expect(canEther([], "c_1")).toBe(false);
+    expect(canEther([], cluster("c_1"))).toBe(false);
   });
 
   it("ignores unfinished work in other clusters", () => {
@@ -118,15 +127,15 @@ describe("canEther", () => {
       task({ id: "b", clusterId: "c_2", status: "TO-DO" }),
     ];
 
-    expect(canEther(tasks, "c_1")).toBe(true);
+    expect(canEther(tasks, cluster("c_1"))).toBe(true);
   });
 });
 
 describe("etherCluster", () => {
   it("stamps the moment on that cluster only", () => {
     const clusters: Cluster[] = [
-      { id: "c_1", name: "First", createdAt: NOW },
-      { id: "c_2", name: "Second", createdAt: NOW },
+      { id: "c_1", name: "First", createdAt: NOW, columns: DEFAULT_COLUMNS },
+      { id: "c_2", name: "Second", createdAt: NOW, columns: DEFAULT_COLUMNS },
     ];
 
     const next = etherCluster(clusters, "c_1", NOW + 5);
@@ -137,7 +146,7 @@ describe("etherCluster", () => {
 
   it("leaves an already-ethered cluster at its original moment", () => {
     const clusters: Cluster[] = [
-      { id: "c_1", name: "First", createdAt: NOW, etheredAt: NOW + 1 },
+      { id: "c_1", name: "First", createdAt: NOW, columns: DEFAULT_COLUMNS, etheredAt: NOW + 1 },
     ];
 
     expect(etherCluster(clusters, "c_1", NOW + 999)[0].etheredAt).toBe(NOW + 1);
@@ -146,8 +155,8 @@ describe("etherCluster", () => {
 
 describe("nextActiveClusterId", () => {
   const clusters: Cluster[] = [
-    { id: "c_1", name: "First", createdAt: NOW },
-    { id: "c_2", name: "Second", createdAt: NOW + 10 },
+    { id: "c_1", name: "First", createdAt: NOW, columns: DEFAULT_COLUMNS },
+    { id: "c_2", name: "Second", createdAt: NOW + 10, columns: DEFAULT_COLUMNS },
   ];
 
   it("keeps the active cluster when it is still live", () => {

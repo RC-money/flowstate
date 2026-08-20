@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { run } from "./run";
 import type { Task } from "../../hooks/useLocalTasks";
+import { DEFAULT_COLUMNS } from "../columns/columns";
 
 const NOW = 1_755_500_000_000;
 const DAY = 86_400_000;
@@ -151,9 +152,9 @@ describe("run: create", () => {
 
 describe("run: clusters", () => {
   const clusters = [
-    { id: "c_1", name: "Flowstate v2", createdAt: NOW },
-    { id: "c_2", name: "Gardening", createdAt: NOW },
-    { id: "c_3", name: "Shipped", createdAt: NOW, etheredAt: NOW },
+    { id: "c_1", name: "Flowstate v2", createdAt: NOW , columns: DEFAULT_COLUMNS},
+    { id: "c_2", name: "Gardening", createdAt: NOW , columns: DEFAULT_COLUMNS},
+    { id: "c_3", name: "Shipped", createdAt: NOW, columns: DEFAULT_COLUMNS, etheredAt: NOW },
   ];
   const clustered = [
     task("t1", "Refactor auth middleware", { clusterId: "c_1" }),
@@ -184,8 +185,8 @@ describe("run: clusters", () => {
 
   test("switch refuses rather than guessing between two clusters", () => {
     const twins = [
-      { id: "c_1", name: "Launch", createdAt: NOW },
-      { id: "c_2", name: "Launch", createdAt: NOW },
+      { id: "c_1", name: "Launch", createdAt: NOW , columns: DEFAULT_COLUMNS},
+      { id: "c_2", name: "Launch", createdAt: NOW , columns: DEFAULT_COLUMNS},
     ];
     const result = run({ kind: "switch", target: "launch" }, clustered, NOW, {
       clusters: twins,

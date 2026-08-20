@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CLUSTER_ID, DEFAULT_CLUSTER_NAME, normalizeBoard } from "./board";
+import { DEFAULT_COLUMNS } from "../columns/columns";
 
 const NOW = 1_700_000_000_000;
 
@@ -16,7 +17,12 @@ describe("normalizeBoard: boards saved before clusters existed", () => {
     const board = normalizeBoard([legacyTask("a"), legacyTask("b")], NOW);
 
     expect(board?.clusters).toEqual([
-      { id: DEFAULT_CLUSTER_ID, name: DEFAULT_CLUSTER_NAME, createdAt: NOW },
+      {
+        id: DEFAULT_CLUSTER_ID,
+        name: DEFAULT_CLUSTER_NAME,
+        createdAt: NOW,
+        columns: DEFAULT_COLUMNS,
+      },
     ]);
     expect(board?.tasks.map((t) => t.id)).toEqual(["a", "b"]);
     expect(board?.tasks.every((t) => t.clusterId === DEFAULT_CLUSTER_ID)).toBe(true);
@@ -40,7 +46,9 @@ describe("normalizeBoard: boards that already have clusters", () => {
       NOW
     );
 
-    expect(board?.clusters).toEqual([{ id: "c_1", name: "Flowstate v2", createdAt: NOW }]);
+    expect(board?.clusters).toEqual([
+      { id: "c_1", name: "Flowstate v2", createdAt: NOW, columns: DEFAULT_COLUMNS },
+    ]);
     expect(board?.tasks[0].clusterId).toBe("c_1");
   });
 
@@ -147,5 +155,38 @@ describe("normalizeBoard: what it refuses", () => {
 
   it("refuses a task row that is not a task, as the loader always has", () => {
     expect(normalizeBoard({ tasks: [{ id: "a" }] }, NOW)).toBeNull();
+  });
+});
+
+describe("normalizeBoard: columns", () => {
+  it("gives a cluster that has never had columns the three defaults", () => {
+    const board = normalizeBoard(
+      { clusters: [{ id: "c_1", name: "Real", createdAt: NOW }], tasks: [] },
+      NOW
+    );
+
+    expect(board?.clusters[0].columns).toEqual(DEFAULT_COLUMNS);
+  });
+
+  it("keeps a board that has made its own columns", () => {
+    const board = normalizeBoard(
+      {
+        clusters: [
+          {
+            id: "c_1",
+            name: "Real",
+            createdAt: NOW,
+            columns: [
+              { id: "ideas", name: "Ideas" },
+              { id: "built", name: "Built" },
+            ],
+          },
+        ],
+        tasks: [],
+      },
+      NOW
+    );
+
+    expect(board?.clusters[0].columns.map((c) => c.id)).toEqual(["ideas", "built"]);
   });
 });
