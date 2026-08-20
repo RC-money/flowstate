@@ -146,9 +146,9 @@ export default function TaskModal({
       <form
         onSubmit={handleSubmit}
         onKeyDown={handleFormKeyDown}
-        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#111933]/95 p-8 shadow-2xl shadow-indigo-950/40"
+        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#111933]/95 p-6 shadow-2xl shadow-indigo-950/40"
       >
-        <div className="space-y-6">
+        <div className="space-y-3">
           <header>
             <p className="text-sm uppercase tracking-widest text-slate-400">
               {mode === "edit" ? "Update task" : "Create task"}
@@ -163,7 +163,7 @@ export default function TaskModal({
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
               placeholder="What needs attention?"
               required
             />
@@ -174,47 +174,47 @@ export default function TaskModal({
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className="mt-2 min-h-[120px] w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+              className="mt-2 min-h-[64px] w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
               placeholder="Add context, acceptance criteria, or links"
             />
           </label>
 
-          <label className="block text-sm font-medium text-slate-200">
-            Tags
-            <span className="ml-2 text-xs font-normal text-slate-500">
-              comma separated &mdash; shared tags pull tasks together
-            </span>
-            <input
-              type="text"
-              value={tagsDraft}
-              onChange={(event) => setTagsDraft(event.target.value)}
-              placeholder="design, api"
-              autoComplete="off"
-              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
-            />
-          </label>
-
-          <label className="block text-sm font-medium text-slate-200">
-            Due date
-            <span className="ml-2 text-xs font-normal text-slate-500">optional</span>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-slate-200">
+              Tags
               <input
-                type="date"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white [color-scheme:dark] focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                type="text"
+                value={tagsDraft}
+                onChange={(event) => setTagsDraft(event.target.value)}
+                placeholder="design, api"
+                autoComplete="off"
+                title="Comma separated — shared tags pull tasks together"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-base text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
               />
-              {dueDate ? (
-                <button
-                  type="button"
-                  onClick={() => setDueDate("")}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:text-white"
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </label>
+            </label>
+
+            <label className="block text-sm font-medium text-slate-200">
+              Due date
+              <span className="ml-2 text-xs font-normal text-slate-500">optional</span>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-base text-white [color-scheme:dark] focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                />
+                {dueDate ? (
+                  <button
+                    type="button"
+                    onClick={() => setDueDate("")}
+                    className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:text-white"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            </label>
+          </div>
 
           <div className="block text-sm font-medium text-slate-200">
             Subtasks
@@ -291,7 +291,7 @@ export default function TaskModal({
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-4">
+        <div className="mt-6 flex flex-col gap-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -323,8 +323,9 @@ export default function TaskModal({
                 })}
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              {status === "DONE" && initialTask?.id && onEther ? (
+            {mode === "edit" ? (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {status === "DONE" && initialTask?.id && onEther ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -353,13 +354,14 @@ export default function TaskModal({
               >
                 Delete
               </button>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <button
               type="button"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base font-medium text-slate-100 transition hover:bg-white/10 sm:w-auto"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-base font-medium text-slate-100 transition hover:bg-white/10 sm:w-auto"
               onClick={onClose}
             >
               Cancel

@@ -5,6 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "../App";
 import { dueState, formatDueLabel, DUE_TONES } from "../lib/taskDates";
 import { subtaskProgress, type Subtask } from "../lib/subtasks";
+import NovaStar from "./NovaStar";
 
 export interface TaskCardProps {
   id: string;
@@ -52,7 +53,7 @@ export default function TaskCard({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className="group relative select-none rounded-[15px] bg-[rgba(18,20,43,0.66)] px-4 pb-4 pt-3.5 backdrop-blur-md transition-all duration-200 ease-out"
+      className="group relative select-none rounded-[19px] bg-[rgba(18,20,43,0.66)] px-5 pb-5 pt-4.5 backdrop-blur-md transition-all duration-200 ease-out"
       layout
       whileTap={{ scale: 0.97 }}
       transition={{ type: "spring", stiffness: 250, damping: 20 }}
@@ -66,7 +67,7 @@ export default function TaskCard({
       <span
         aria-hidden="true"
         className={[
-          "absolute right-3.5 top-3.5 h-[7px] w-[7px] rounded-full",
+          "absolute right-4 top-4 h-[7px] w-[7px] rounded-full",
           status === "IN PROGRESS" ? "animate-pulse" : "",
         ].join(" ")}
         style={{ background: accent, boxShadow: `0 0 12px ${accent}` }}
@@ -99,14 +100,7 @@ export default function TaskCard({
                 className="inline-flex items-center gap-0.5 text-[11px] leading-none"
               >
                 {Array.from({ length: progress.total }, (_, i) => (
-                  <span
-                    key={i}
-                    aria-hidden="true"
-                    className={i < progress.done ? "text-[#f7e28b]" : "text-[#3d425f]"}
-                    style={i < progress.done ? { textShadow: "0 0 6px rgba(247,226,139,0.8)" } : undefined}
-                  >
-                    &#9733;
-                  </span>
+                  <NovaStar key={i} filled={i < progress.done} />
                 ))}
               </span>
             ) : null}
