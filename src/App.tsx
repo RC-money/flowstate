@@ -55,6 +55,7 @@ import { useLocalTasks, touchTask, type Task, type TaskStatus } from "./hooks/us
 import {
   canEther,
   etherCluster,
+  isFinished,
   liveClusters,
   makeCluster,
   nextActiveClusterId,
@@ -715,7 +716,14 @@ function AppShell() {
       const cluster = clusters.find((entry) => entry.id === clusterId);
       if (!cluster || !canEther(tasks, cluster)) return;
       setClusters((prev) => etherCluster(prev, clusterId, Date.now()));
-      pushToast(`"${cluster.name}" is a galaxy now.`, "success");
+      // Says which ending it was. Nothing is destroyed either way, but a
+      // project let go of should not be congratulated as if it were finished.
+      pushToast(
+        isFinished(tasks, cluster)
+          ? `"${cluster.name}" is a galaxy now.`
+          : `"${cluster.name}" has gone to the ether.`,
+        "success"
+      );
     },
     [clusters, tasks, pushToast, setClusters]
   );
@@ -857,6 +865,7 @@ function AppShell() {
       {
         id: "cmd-new-task",
         label: "New Task",
+        description: "Add a task to the column you last touched.",
         hint: "N",
         run: () => {
           logEvent({ type: "palette:run" });
@@ -866,6 +875,7 @@ function AppShell() {
       {
         id: "cmd-observatory",
         label: "Open Observatory",
+        description: "Biomes, music, and what your planets and moons look like.",
         hint: "O",
         run: () => {
           logEvent({ type: "palette:run" });
@@ -875,7 +885,8 @@ function AppShell() {
       {
         id: "cmd-andromeda",
         label: "Andromeda",
-        hint: "All your clusters",
+        description:
+          "Every project as a point on one galaxy. Travel between them, rename one, or end one.",
         run: () => {
           logEvent({ type: "palette:run" });
           setAndromedaNaming(false);
@@ -885,7 +896,7 @@ function AppShell() {
       {
         id: "cmd-new-cluster",
         label: "New cluster",
-        hint: "Starts in Andromeda",
+        description: "Start another project, with a board and columns of its own.",
         run: () => {
           logEvent({ type: "palette:run" });
           setAndromedaNaming(true);
@@ -895,7 +906,8 @@ function AppShell() {
       {
         id: "cmd-columns",
         label: "Columns",
-        hint: "Shape this board",
+        description:
+          "Add, rename, reorder or remove this board's columns. The last one is the finish line.",
         run: () => {
           logEvent({ type: "palette:run" });
           setColumnsOpen(true);
@@ -906,6 +918,7 @@ function AppShell() {
             {
               id: "cmd-dark-forest-restore",
               label: `Restore ${darkForestTasks.length} task${darkForestTasks.length === 1 ? "" : "s"} from the Dark Forest`,
+              description: "Bring work you set aside back onto the board.",
               hint: "R",
               run: () => {
                 logEvent({ type: "palette:run" });
@@ -922,6 +935,8 @@ function AppShell() {
       {
         id: "cmd-ask-flow",
         label: "Ask Flow",
+        description:
+          "Tell the board what to do in plain English -- \"move the auth thing to done\". Runs offline, no model involved.",
         section: "Data & assistants",
         hint: "A",
         run: () => {
@@ -932,6 +947,7 @@ function AppShell() {
       {
         id: "cmd-export",
         label: "Export board as JSON",
+        description: "Save every cluster, column and task to a file you keep.",
         section: "Data & assistants",
         hint: "X",
         run: () => {
@@ -942,6 +958,7 @@ function AppShell() {
       {
         id: "cmd-import",
         label: "Import board from JSON",
+        description: "Replace this board from a file you exported earlier.",
         section: "Data & assistants",
         hint: "I",
         run: () => {
@@ -1144,22 +1161,11 @@ function AppShell() {
             Everything lives on this machine. Export is a plain JSON file — it is
             the whole board.
           </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={handleExportTasks}
-              className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 transition hover:border-white/40 hover:bg-white/10"
-            >
-              Export JSON
-            </button>
-            <button
-              type="button"
-              onClick={() => importInputRef.current?.click()}
-              className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition hover:border-white/30 hover:bg-white/5"
-            >
-              Import
-            </button>
-          </div>
+          {/* The buttons live in the palette, not here as well. This says the
+              thing that needed saying; ⌘K does the thing. */}
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[#4d587a]">
+            Export and import are in &#8984;K
+          </p>
         </section>
       </Observatory>
 

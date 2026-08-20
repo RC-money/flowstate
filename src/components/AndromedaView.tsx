@@ -238,7 +238,7 @@ export default function AndromedaView({
   const renderPoint = (point: AndromedaPoint) => {
     const isActive = point.id === activeClusterId;
     const isHovered = point.id === hovered;
-    const radius = 0.028 + point.size * 0.038;
+    const radius = 0.015 + point.size * 0.02;
     // Ethered galaxies sit outside the disc, so they are not on its plane and
     // do not get its projection.
     const at = point.ethered ? point : projectToDisc(point, spin);
@@ -255,24 +255,24 @@ export default function AndromedaView({
             and hunting a six-pixel dot is not the feeling here. */}
         <circle r={Math.max(radius * 4, 0.1)} fill="transparent" />
         <circle
-          r={radius * (isHovered || isActive ? 5.2 : 4)}
+          r={radius * (isHovered || isActive ? 4 : 3.1)}
           fill="url(#andromeda-knot)"
-          opacity={point.brightness * (isHovered || isActive ? 1 : 0.75)}
+          opacity={point.brightness * (isHovered || isActive ? 0.85 : 0.6)}
         />
         {isActive ? (
           <circle
-            r={radius * 3.6}
+            r={radius * 2.9}
             fill="none"
             stroke="#a5afff"
-            strokeWidth={0.007}
-            opacity={0.75}
+            strokeWidth={0.005}
+            opacity={0.6}
           />
         ) : null}
         {/* Always named. Three unlabelled lights on a photograph of a
             hundred billion of them is not a map. Stroked in the background
             colour first, so a name stays readable across the bright bulge. */}
         <text
-          y={radius * 4.6 + 0.075}
+          y={radius * 3.6 + 0.06}
           textAnchor="middle"
           fill={point.ethered ? "#a7b2cc" : "#eef1ff"}
           opacity={isHovered || isActive ? 1 : 0.82}
@@ -512,10 +512,7 @@ export default function AndromedaView({
           <p className="mt-1.5 truncate text-sm text-[#c9d0ff]">
             {live.find((point) => point.id === activeClusterId)?.name ?? "Nowhere yet"}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {live.length} {live.length === 1 ? "cluster" : "clusters"} on the arms
-            {deep.length ? `, ${deep.length} out in the deep field` : ""}.
-          </p>
+
         </header>
 
         <div className="flex-1 overflow-y-auto px-3 py-3">

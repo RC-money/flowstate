@@ -5,6 +5,7 @@ import {
   DEFAULT_CLUSTER_NAME,
   canEther,
   etherCluster,
+  isFinished,
   isLive,
   liveClusters,
   makeCluster,
@@ -81,13 +82,13 @@ describe("tasksInCluster", () => {
 });
 
 describe("canEther", () => {
-  it("refuses a cluster with unfinished work", () => {
+  it("allows a cluster with unfinished work -- letting go is not a failure", () => {
     const tasks = [
       task({ id: "a", clusterId: "c_1", status: "DONE" }),
       task({ id: "b", clusterId: "c_1", status: "IN PROGRESS" }),
     ];
 
-    expect(canEther(tasks, cluster("c_1"))).toBe(false);
+    expect(canEther(tasks, cluster("c_1"))).toBe(true);
   });
 
   it("allows a cluster whose tasks are all done", () => {
@@ -108,16 +109,16 @@ describe("canEther", () => {
     expect(canEther(tasks, cluster("c_1"))).toBe(true);
   });
 
-  it("counts a task hidden in the Dark Forest as unfinished", () => {
+  it("allows a cluster holding work parked in the Dark Forest", () => {
     const tasks = [
       task({ id: "a", clusterId: "c_1", status: "DONE" }),
       task({ id: "b", clusterId: "c_1", status: "TO-DO", darkForest: true }),
     ];
 
-    expect(canEther(tasks, cluster("c_1"))).toBe(false);
+    expect(canEther(tasks, cluster("c_1"))).toBe(true);
   });
 
-  it("refuses an empty cluster -- the ceremony has to be earned", () => {
+  it("refuses an empty cluster -- it was never a project", () => {
     expect(canEther([], cluster("c_1"))).toBe(false);
   });
 
@@ -177,5 +178,35 @@ describe("nextActiveClusterId", () => {
     const gone = clusters.map((c) => ({ ...c, etheredAt: NOW }));
 
     expect(nextActiveClusterId(gone, "c_1")).toBeNull();
+  });
+});
+
+describe("isFinished", () => {
+  it("is true when every task reached the last column", () => {
+    const tasks = [
+      task({ id: "a", clusterId: "c_1", status: "DONE" }),
+      task({ id: "b", clusterId: "c_1", status: "DONE" }),
+    ];
+
+    expect(isFinished(tasks, cluster("c_1"))).toBe(true);
+  });
+
+  it("is false while anything is still open", () => {
+    const tasks = [
+      task({ id: "a", clusterId: "c_1", status: "DONE" }),
+      task({ id: "b", clusterId: "c_1", status: "TO-DO" }),
+    ];
+
+    expect(isFinished(tasks, cluster("c_1"))).toBe(false);
+  });
+
+  it("counts work parked in the Dark Forest as unfinished", () => {
+    const tasks = [task({ id: "a", clusterId: "c_1", status: "TO-DO", darkForest: true })];
+
+    expect(isFinished(tasks, cluster("c_1"))).toBe(false);
+  });
+
+  it("is false for an empty cluster, which finished nothing", () => {
+    expect(isFinished([], cluster("c_1"))).toBe(false);
   });
 });

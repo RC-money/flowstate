@@ -39,14 +39,22 @@ export const tasksInCluster = (tasks: Task[], clusterId: string): Task[] =>
   tasks.filter((task) => task.clusterId === clusterId);
 
 /**
- * Whether a cluster has earned its ending.
+ * Whether a cluster can be sent to the ether.
  *
- * Every task has to have reached the last column or already gone, and there has
- * to be at least one -- an empty cluster never earned anything. A task parked
- * in the Dark Forest counts as unfinished on purpose: hiding work is not the
- * same as ending it.
+ * Only one rule: it has to hold something. An empty cluster was never a
+ * project and gets deleted rather than immortalised.
+ *
+ * Deliberately not gated on the work being finished. Abandoning a project you
+ * are never going to complete is a real thing to want, and this app's whole
+ * argument is that letting something go should cost you no shame. What does
+ * not change is that nothing is destroyed: the tasks stay in the file either
+ * way, finished or not.
  */
-export const canEther = (tasks: Task[], cluster: Cluster): boolean => {
+export const canEther = (tasks: Task[], cluster: Cluster): boolean =>
+  tasksInCluster(tasks, cluster.id).length > 0;
+
+/** Whether everything inside actually reached the end. Changes what we say. */
+export const isFinished = (tasks: Task[], cluster: Cluster): boolean => {
   const members = tasksInCluster(tasks, cluster.id);
   if (members.length === 0) return false;
   return members.every(

@@ -9,6 +9,8 @@ import React, {
 export type Command = {
   id: string;
   label: string;
+  /** What it does, in a line. The palette is where people meet a feature. */
+  description?: string;
   hint?: string;
   /** Groups the entry under a heading. Ungrouped entries lead the list. */
   section?: string;
@@ -28,6 +30,7 @@ const filterCommands = (commands: Command[], query: string): Command[] => {
   return commands.filter(
     (cmd) =>
       cmd.label.toLowerCase().includes(normalized) ||
+      (cmd.description ?? "").toLowerCase().includes(normalized) ||
       (cmd.section ?? "").toLowerCase().includes(normalized)
   );
 };
@@ -219,14 +222,17 @@ export default function CommandPalette({
                           : "hover:border-white/10 hover:bg-white/5",
                       ].join(" ")}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <span>{cmd.label}</span>
                         {cmd.hint ? (
-                          <span className="text-xs uppercase tracking-wide text-slate-500">
+                          <span className="shrink-0 text-xs uppercase tracking-wide text-slate-500">
                             {cmd.hint}
                           </span>
                         ) : null}
                       </div>
+                      {cmd.description ? (
+                        <p className="mt-0.5 text-xs text-slate-500">{cmd.description}</p>
+                      ) : null}
                     </button>
                   </li>
                 );

@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { catalogNameFor, neighbourPose, ringSlot } from "../lib/clusters/andromeda";
 import { isLive, type Cluster } from "../lib/clusters/clusters";
 import { columnPalette } from "../lib/columns/palette";
+import { useCelestialPrefs } from "../hooks/useCelestialPrefs";
+import { accentForStatus } from "../lib/celestialPrefs";
 import type { Task } from "../hooks/useLocalTasks";
 
 interface UniverseOverlayProps {
@@ -38,6 +40,16 @@ export default function UniverseOverlay({
   onEnter,
 }: UniverseOverlayProps) {
   const [hovered, setHovered] = useState<string | null>(null);
+  const [prefs] = useCelestialPrefs();
+
+  /**
+   * The same rule the board and the galaxy use: a column flying a chosen body
+   * wears that body's accent, and only a column without one falls back to its
+   * position's hue. Using the palette for everything here made a neighbour's
+   * planets a different colour from the same planets seen up close.
+   */
+  const columnColor = (columnId: string, index: number): string =>
+    prefs.statusSkins[columnId] ? accentForStatus(prefs, columnId) : columnPalette(index).core;
 
   const neighbours = useMemo(() => {
     const others = clusters.filter((cluster) => cluster.id !== activeClusterId);
@@ -101,7 +113,7 @@ export default function UniverseOverlay({
           return {
             angle: (i / Math.max(1, members.length)) * Math.PI * 2 + columnIndex,
             ring: 0.45 + (columnIndex / columnCount) * 0.8,
-            color: columnPalette(columnIndex).core,
+            color: columnColor(task.status, columnIndex),
             done: columnIndex === columnCount - 1,
           };
         });
