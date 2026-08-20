@@ -158,3 +158,37 @@ before.
 Tests first, colocated, covering: the array-to-object migration, `clusterId`
 repair, catalog-name and placement determinism, ether eligibility,
 active-cluster fallback when the active one is ethered, and both new commands.
+
+---
+
+## Amendments during the build, 2026-08-20
+
+The design above was written before any of it existed. Three things changed
+once it was real.
+
+**The map is Andromeda, and it is reached from the palette.** The spec put the
+disc inside the galaxy view as a zoom step, with the wordmark as a second door.
+It became its own surface -- `AndromedaView` -- opened by one palette entry.
+Live clusters are points on four spiral arms, positioned by a hash of the id;
+ethered ones sit out past the rim as the galaxies they became. A panel down the
+right side lists them, and does the renaming, ethering and creating that the
+board no longer carries.
+
+The spinning galaxy holds still while the pointer is over it. A point you are
+reaching for should not drift out from under the cursor, and one revolution a
+minute is still fast enough to lose a small target.
+
+**Shaping the board left the board.** The spec had a `+` on the switcher and
+per-column controls in place. Both went into the palette, and the per-column
+palette entries went into a `ColumnsPanel`: two commands per column reads fine
+at three columns and is unusable at fifty. Andromeda is the same answer for
+clusters -- one entry, not one per thing.
+
+**Ask Flow sits with import and export**, under "Data & assistants". It is not
+AI and the label never claims it is: `parse -> resolve -> run` is deterministic
+and offline. It groups there because all three are how the board is reached
+from outside a mouse, and because it is the same path an MCP assistant will
+use.
+
+Still unbuilt: the dive animation between the board and the map. Entering a
+cluster is currently a cut, not a fall.

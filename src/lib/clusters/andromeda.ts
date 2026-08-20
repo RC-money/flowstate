@@ -1,0 +1,141 @@
+import { decayLevel } from "../orbitalDecay";
+import { armSlot, catalogName, deepFieldPlacement } from "./catalog";
+import { isLive, type Cluster } from "./clusters";
+
+/**
+ * Andromeda: every project laid out on one spiral, so you can see all of your
+ * work at once without opening any of it.
+ *
+ * Live clusters are points on the arms. Ethered ones sit out past the rim as
+ * the galaxies they became. Everything derives from the cluster id, so the map
+ * never reshuffles and you learn where your own projects live.
+ */
+
+/** How many arms the spiral is drawn with. */
+export const ANDROMEDA_ARMS = 4;
+
+/** How far an arm sweeps around between the core and the rim, in radians. */
+const ARM_SWEEP = 1.9;
+
+/** Nothing dimmer than this: an abandoned project should still be findable. */
+const MIN_BRIGHTNESS = 0.22;
+
+export interface SpiralSlot {
+  arm: number;
+  /** 0 at the core, 1 at the rim. */
+  radius: number;
+}
+
+/**
+ * How far the disc is tipped away from face-on. Andromeda is seen at a steep
+ * angle from here, which is why it reads as an ellipse rather than a pinwheel.
+ */
+export const DISC_FLATTEN = 0.33;
+
+/** Which way the long axis of that ellipse lies, in radians. */
+export const DISC_TILT = -0.42;
+
+/**
+ * A point on the flat disc, seen from where we actually stand: turned by the
+ * galaxy's own rotation, flattened by the viewing angle, then tipped.
+ *
+ * Done in numbers rather than as an SVG transform on purpose. Scaling the
+ * group would squash every label and turn every round point into an oval; this
+ * way only the positions are projected and everything drawn at them stays
+ * itself.
+ */
+export const projectToDisc = (
+  point: { x: number; y: number },
+  spinDegrees: number
+): { x: number; y: number } => {
+  const spin = (spinDegrees * Math.PI) / 180;
+  const sx = point.x * Math.cos(spin) - point.y * Math.sin(spin);
+  const sy = point.x * Math.sin(spin) + point.y * Math.cos(spin);
+  const fy = sy * DISC_FLATTEN;
+  return {
+    x: sx * Math.cos(DISC_TILT) - fy * Math.sin(DISC_TILT),
+    y: sx * Math.sin(DISC_TILT) + fy * Math.cos(DISC_TILT),
+  };
+};
+
+export interface AndromedaPoint {
+  id: string;
+  name: string;
+  /** Unit coordinates. Inside the disc is within radius 1. */
+  x: number;
+  y: number;
+  /** 0.22..1, falling as the cluster goes untouched. */
+  brightness: number;
+  /** 0..1, growing with the work inside. */
+  size: number;
+  ethered: boolean;
+  /** What the sky calls it. Only ethered clusters have one. */
+  catalog?: string;
+}
+
+/**
+ * Where a slot falls on the spiral. The arm turns as it runs outward, which is
+ * the whole difference between a spiral and a set of spokes.
+ */
+export const spiralPoint = ({ arm, radius }: SpiralSlot): { x: number; y: number } => {
+  const angle = (arm / ANDROMEDA_ARMS) * Math.PI * 2 + radius * ARM_SWEEP;
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+};
+
+/**
+ * The whole map.
+ *
+ * `lastTouched` and `openCounts` are passed in rather than derived here, so
+ * this stays pure and the caller decides what "touched" means. A cluster with
+ * neither is treated as fresh and small, which is exactly what a new one is.
+ */
+export const andromedaPoints = (
+  clusters: Cluster[],
+  now: number,
+  lastTouched: Record<string, number> = {},
+  openCounts: Record<string, number> = {}
+): AndromedaPoint[] => {
+  // Ethered clusters recede in the order they were finished, newest nearest.
+  const ordered = clusters
+    .filter((cluster) => !isLive(cluster))
+    .sort((a, b) => (b.etheredAt ?? 0) - (a.etheredAt ?? 0));
+  const rank = new Map(ordered.map((cluster, index) => [cluster.id, index]));
+
+  return clusters.map((cluster) => {
+    const touched = lastTouched[cluster.id] ?? cluster.createdAt;
+    const open = openCounts[cluster.id] ?? 0;
+    // Saturating rather than linear: a hundred tasks is a big project, not a
+    // point that eats the disc.
+    const size = 1 - 1 / (1 + open / 6);
+
+    if (!isLive(cluster)) {
+      const placement = deepFieldPlacement(cluster.id, rank.get(cluster.id) ?? 0);
+      // Beyond the rim: 1 is the edge of the disc, and a finished galaxy is
+      // outside it. Further out means longer ago.
+      const distance = 1.25 + (1 - placement.distance) * 1.6;
+      return {
+        id: cluster.id,
+        name: cluster.name,
+        x: Math.cos(placement.angle) * distance,
+        y: Math.sin(placement.angle) * distance,
+        brightness: 0.55,
+        size,
+        ethered: true,
+        catalog: catalogName(cluster.id),
+      };
+    }
+
+    const { x, y } = spiralPoint(armSlot(cluster.id));
+    // The same curve a neglected task follows, one level up.
+    const decay = decayLevel(touched, now);
+    return {
+      id: cluster.id,
+      name: cluster.name,
+      x,
+      y,
+      brightness: MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * (1 - decay),
+      size,
+      ethered: false,
+    };
+  });
+};

@@ -60,11 +60,13 @@ import {
   nextActiveClusterId,
   tasksInCluster,
 } from "./lib/clusters/clusters";
-import ClusterSwitcher from "./components/ClusterSwitcher";
+import AndromedaView from "./components/AndromedaView";
+import ColumnsPanel from "./components/ColumnsPanel";
 import {
   DEFAULT_COLUMNS,
   addColumn,
   isTerminal,
+  moveColumn,
   removeColumn,
   renameColumn,
   terminalColumnId,
@@ -135,18 +137,6 @@ const isTaskPayload = (item: unknown): item is Task => {
   );
 };
 
-/**
- * Asks a component to open one of its naming fields, on the frame after the
- * palette has finished closing. Dispatched immediately, the palette's own focus
- * restoration lands on the fresh field and blurs it, and a field that commits
- * on blur closes before anyone can type in it.
- */
-const openAfterPalette = (event: string, detail?: Record<string, string>): void => {
-  requestAnimationFrame(() => {
-    window.dispatchEvent(new CustomEvent(event, detail ? { detail } : undefined));
-  });
-};
-
 const sanitizeTasks = (data: unknown): Task[] | null => {
   if (!Array.isArray(data)) return null;
   const cleaned = data.filter(isTaskPayload);
@@ -197,6 +187,9 @@ function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const [observatoryOpen, setObservatoryOpen] = useState(false);
+  const [andromedaOpen, setAndromedaOpen] = useState(false);
+  const [andromedaNaming, setAndromedaNaming] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [dismissedWelcome, setDismissedWelcome] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(WELCOME_KEY) !== null;
@@ -247,10 +240,15 @@ function AppShell() {
     () => activeCluster?.columns ?? DEFAULT_COLUMNS,
     [activeCluster]
   );
-  const activeCanEther = useMemo(
-    () => (activeCluster ? canEther(tasks, activeCluster) : false),
-    [tasks, activeCluster]
-  );
+  const totalCountsByCluster = useMemo(() => {
+    const counts: Record<string, number> = {};
+    tasks.forEach((task) => {
+      const id = task.clusterId;
+      if (!id) return;
+      counts[id] = (counts[id] ?? 0) + 1;
+    });
+    return counts;
+  }, [tasks]);
   const etherealTasks = useMemo(
     () => clusterTasks.filter((task) => task.etheredAt !== undefined),
     [clusterTasks]
@@ -603,16 +601,6 @@ function AppShell() {
     [pushToast, setClusters]
   );
 
-  const handleEtherCluster = useCallback(() => {
-    if (!activeClusterId) return;
-    const cluster = clusters.find((entry) => entry.id === activeClusterId);
-    // Guarded here as well as in the UI: nothing should be able to end a
-    // project that still has work in it.
-    if (!cluster || !canEther(tasks, cluster)) return;
-    setClusters((prev) => etherCluster(prev, activeClusterId, Date.now()));
-    pushToast(`"${cluster.name}" is a galaxy now.`, "success");
-  }, [activeClusterId, clusters, tasks, pushToast, setClusters]);
-
   /** Every column edit lands on the active cluster and nowhere else. */
   const editColumns = useCallback(
     (change: (columns: Column[]) => Column[]) => {
@@ -631,7 +619,11 @@ function AppShell() {
   const handleAddColumn = useCallback(
     (name: string) => {
       editColumns((columns) =>
-        addColumn(columns, name, () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`)
+        addColumn(
+          columns,
+          name,
+          () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        )
       );
     },
     [editColumns]
@@ -664,6 +656,81 @@ function AppShell() {
     },
     [activeColumns, activeClusterId, editColumns, setTasks]
   );
+
+  const handleMoveColumn = useCallback(
+    (columnId: string, position: number) => {
+      editColumns((columns) => moveColumn(columns, columnId, position));
+    },
+    [editColumns]
+  );
+
+  const handleRenameCluster = useCallback(
+    (clusterId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setClusters((prev) =>
+        prev.map((cluster) =>
+          cluster.id === clusterId ? { ...cluster, name: trimmed } : cluster
+        )
+      );
+    },
+    [setClusters]
+  );
+
+  /** When any of a cluster's work last moved. This is what dims its point. */
+  const lastTouchedByCluster = useMemo(() => {
+    const touched: Record<string, number> = {};
+    tasks.forEach((task) => {
+      const id = task.clusterId;
+      if (!id) return;
+      touched[id] = Math.max(touched[id] ?? 0, task.updatedAt);
+    });
+    return touched;
+  }, [tasks]);
+
+  const clusterCanEther = useCallback(
+    (clusterId: string) => {
+      const cluster = clusters.find((entry) => entry.id === clusterId);
+      return cluster ? canEther(tasks, cluster) : false;
+    },
+    [clusters, tasks]
+  );
+
+  /** Ethering from Andromeda, where the cluster in question may not be active. */
+  const handleEtherById = useCallback(
+    (clusterId: string) => {
+      const cluster = clusters.find((entry) => entry.id === clusterId);
+      if (!cluster || !canEther(tasks, cluster)) return;
+      setClusters((prev) => etherCluster(prev, clusterId, Date.now()));
+      pushToast(`"${cluster.name}" is a galaxy now.`, "success");
+    },
+    [clusters, tasks, pushToast, setClusters]
+  );
+
+  /**
+   * Only ever an empty one. Ethering is how finished work leaves; this is for a
+   * cluster started by mistake, and refusing when it holds tasks means nothing
+   * can quietly take work with it.
+   */
+  const handleDeleteCluster = useCallback(
+    (clusterId: string) => {
+      if (tasks.some((task) => task.clusterId === clusterId)) return;
+      const cluster = clusters.find((entry) => entry.id === clusterId);
+      setClusters((prev) => {
+        const next = prev.filter((entry) => entry.id !== clusterId);
+        return next.some((entry) => entry.etheredAt === undefined) ? next : prev;
+      });
+      if (cluster) pushToast(`"${cluster.name}" never formed.`, "success");
+    },
+    [tasks, clusters, pushToast, setClusters]
+  );
+
+  /** Diving into a point: that cluster becomes the board you are looking at. */
+  const handleEnterCluster = useCallback((clusterId: string) => {
+    setActiveClusterId(clusterId);
+    setAndromedaOpen(false);
+    setView("board");
+  }, []);
 
   const handleViewChange = (nextView: ViewMode) => {
     setView(nextView);
@@ -784,12 +851,32 @@ function AppShell() {
         },
       },
       {
-        id: "cmd-ask-flow",
-        label: "Ask Flow (board commands)",
-        hint: "A",
+        id: "cmd-andromeda",
+        label: "Andromeda",
+        hint: "All your clusters",
         run: () => {
           logEvent({ type: "palette:run" });
-          setAskOpen(true);
+          setAndromedaNaming(false);
+          setAndromedaOpen(true);
+        },
+      },
+      {
+        id: "cmd-new-cluster",
+        label: "New cluster",
+        hint: "Starts in Andromeda",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          setAndromedaNaming(true);
+          setAndromedaOpen(true);
+        },
+      },
+      {
+        id: "cmd-columns",
+        label: "Columns",
+        hint: "Shape this board",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          setColumnsOpen(true);
         },
       },
       ...(darkForestTasks.length
@@ -805,9 +892,25 @@ function AppShell() {
             },
           ]
         : []),
+
+      // Ask Flow is deterministic and offline -- no model is involved. It sits
+      // with import and export because all three are ways the board is reached
+      // from outside a mouse, and because it is the same parse-resolve-run path
+      // an MCP assistant will use.
+      {
+        id: "cmd-ask-flow",
+        label: "Ask Flow",
+        section: "Data & assistants",
+        hint: "A",
+        run: () => {
+          logEvent({ type: "palette:run" });
+          setAskOpen(true);
+        },
+      },
       {
         id: "cmd-export",
-        label: "Export tasks as JSON",
+        label: "Export board as JSON",
+        section: "Data & assistants",
         hint: "X",
         run: () => {
           logEvent({ type: "palette:run" });
@@ -816,85 +919,14 @@ function AppShell() {
       },
       {
         id: "cmd-import",
-        label: "Import tasks from JSON",
+        label: "Import board from JSON",
+        section: "Data & assistants",
         hint: "I",
         run: () => {
           logEvent({ type: "palette:run" });
           importInputRef.current?.click();
         },
       },
-
-      // Shaping the board lives here rather than on it. The board stays cards
-      // and columns; everything that rearranges them is one keystroke away and
-      // filters as you type, which is what keeps a fifty-column board sane.
-      {
-        id: "cmd-new-cluster",
-        label: "New cluster",
-        section: "Clusters",
-        run: () => {
-          logEvent({ type: "palette:run" });
-          // The switcher owns the naming field; the palette only opens it, so a
-          // cluster is named in one place however you got there. Deferred a
-          // frame: the palette is still closing, and the focus it hands back
-          // would blur the new field the moment it appeared.
-          openAfterPalette("flowstate:new-cluster");
-        },
-      },
-      ...liveClusterList
-        .filter((cluster) => cluster.id !== activeClusterId)
-        .map((cluster, index) => ({
-          id: `cmd-switch-${cluster.id}`,
-          label: `Switch to ${cluster.name}`,
-          section: "Clusters",
-          hint: index < 9 ? `⌘${index + 1}` : undefined,
-          run: () => {
-            logEvent({ type: "palette:run" });
-            setActiveClusterId(cluster.id);
-          },
-        })),
-      ...(activeCanEther && activeCluster
-        ? [
-            {
-              id: "cmd-ether-cluster",
-              label: `Send ${activeCluster.name} to the ether`,
-              section: "Clusters",
-              run: () => {
-                logEvent({ type: "palette:run" });
-                handleEtherCluster();
-              },
-            },
-          ]
-        : []),
-
-      {
-        id: "cmd-new-column",
-        label: "New column",
-        section: "Columns",
-        run: () => {
-          logEvent({ type: "palette:run" });
-          openAfterPalette("flowstate:new-column");
-        },
-      },
-      ...activeColumns.map((column) => ({
-        id: `cmd-rename-col-${column.id}`,
-        label: `Rename column: ${column.name}`,
-        section: "Columns",
-        run: () => {
-          logEvent({ type: "palette:run" });
-          openAfterPalette("flowstate:rename-column", { id: column.id });
-        },
-      })),
-      ...(activeColumns.length > 1
-        ? activeColumns.map((column) => ({
-            id: `cmd-remove-col-${column.id}`,
-            label: `Remove column: ${column.name}`,
-            section: "Columns",
-            run: () => {
-              logEvent({ type: "palette:run" });
-              handleRemoveColumn(column.id);
-            },
-          }))
-        : []),
     ],
     [
       focusedColumn,
@@ -902,13 +934,6 @@ function AppShell() {
       handleExportTasks,
       darkForestTasks,
       handleRestoreFromDarkForest,
-      liveClusterList,
-      activeClusterId,
-      activeCluster,
-      activeCanEther,
-      activeColumns,
-      handleEtherCluster,
-      handleRemoveColumn,
     ]
   );
 
@@ -993,17 +1018,6 @@ function AppShell() {
             </button>
           </div>
 
-          <div className="mt-3">
-            <ClusterSwitcher
-              clusters={liveClusterList}
-              activeId={activeClusterId}
-              counts={openCountsByCluster}
-              onSelect={setActiveClusterId}
-              onCreate={handleCreateCluster}
-              canEther={activeCanEther}
-              onEther={handleEtherCluster}
-            />
-          </div>
         </header>
 
 
@@ -1055,7 +1069,15 @@ function AppShell() {
         </div>
 
 
-        <StatusBar tasks={visibleTasks} />
+        <StatusBar
+          tasks={visibleTasks}
+          columns={activeColumns}
+          clusterName={activeCluster?.name ?? "Flowstate"}
+          onOpenAndromeda={() => {
+            setAndromedaNaming(false);
+            setAndromedaOpen(true);
+          }}
+        />
       </main>
 
       <input
@@ -1126,6 +1148,39 @@ function AppShell() {
         commands={commands}
         onGlobalOpen={handlePaletteOpen}
       />
+
+      {andromedaOpen ? (
+        <AndromedaView
+          clusters={clusters}
+          activeClusterId={activeClusterId}
+          lastTouched={lastTouchedByCluster}
+          totalCounts={totalCountsByCluster}
+          openCounts={openCountsByCluster}
+          onEnter={handleEnterCluster}
+          onCreate={handleCreateCluster}
+          onRename={handleRenameCluster}
+          onEther={handleEtherById}
+          onDelete={handleDeleteCluster}
+          canEther={clusterCanEther}
+          startNaming={andromedaNaming}
+          onClose={() => {
+            setAndromedaOpen(false);
+            setAndromedaNaming(false);
+          }}
+        />
+      ) : null}
+
+      {columnsOpen ? (
+        <ColumnsPanel
+          columns={activeColumns}
+          clusterName={activeCluster?.name ?? "This board"}
+          onAdd={handleAddColumn}
+          onRename={handleRenameColumn}
+          onRemove={handleRemoveColumn}
+          onMove={handleMoveColumn}
+          onClose={() => setColumnsOpen(false)}
+        />
+      ) : null}
 
       <AskFlowPanel
         open={askOpen}
