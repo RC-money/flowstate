@@ -937,7 +937,7 @@ function AppShell() {
         id: "cmd-connect",
         label: "Connect your AI",
         description:
-          "Let Claude, Codex or any MCP client run your board -- on this machine, no server, no account.",
+          "Hand your board to whatever AI you already use -- on this machine, no server, no account.",
         section: "Data & assistants",
         hint: "A",
         run: () => {

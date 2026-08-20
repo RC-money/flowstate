@@ -12,7 +12,7 @@ const board = { clusters, tasks: [task("t1", "Refactor auth middleware")] };
 const boardRaw = JSON.stringify(board);
 const otherRaw = JSON.stringify({
   clusters,
-  tasks: [task("t2", "Something Claude added")],
+  tasks: [task("t2", "Something an assistant added")],
 });
 
 describe("shouldAdoptExternalChange", () => {
