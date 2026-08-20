@@ -14,8 +14,13 @@ import {
 } from "./celestialPrefs";
 
 describe("SKINS", () => {
-  it("offers seven bodies, one per moon sprite", () => {
-    expect(SKINS).toHaveLength(7);
+  it("offers six bodies, spaced far enough apart to tell apart", () => {
+    expect(SKINS).toHaveLength(6);
+  });
+
+  it("still resolves a body it no longer offers, rather than retinting it", () => {
+    // Copper was dropped from the picker; a column already flying it keeps it.
+    expect(skinById("moon3").label).toBe("Copper");
   });
 
   it("gives every skin a readable accent and a label", () => {
@@ -118,10 +123,21 @@ describe("moonTintForStatus", () => {
 });
 
 describe("moonGlowTintForStatus: the glow is its own colour", () => {
-  it("falls back to the body's tint, so nothing changes until it is set", () => {
+  it("starts from a real default rather than whatever the body happens to be", () => {
     const prefs = normalizeCelestialPrefs({ moonTints: { "TO-DO": "#00ff00" } });
 
-    expect(moonGlowTintForStatus(prefs, "TO-DO")).toBe("#00ff00");
+    expect(moonGlowTintForStatus(prefs, "TO-DO")).toBe(
+      DEFAULT_CELESTIAL_PREFS.moonGlowTints["TO-DO"]
+    );
+  });
+
+  it("falls back to the body for a column with no default of its own", () => {
+    // A column the user added: nothing shipped a halo colour for it.
+    const prefs = normalizeCelestialPrefs({ moonTints: { Review: "#00ff00" } });
+
+    expect(moonGlowTintForStatus({ ...prefs, moonTints: { Review: "#00ff00" } }, "Review")).toBe(
+      "#00ff00"
+    );
   });
 
   it("keeps a glow colour that differs from the body", () => {
@@ -134,20 +150,22 @@ describe("moonGlowTintForStatus: the glow is its own colour", () => {
     expect(moonGlowTintForStatus(prefs, "TO-DO")).toBe("#ff00ff");
   });
 
-  it("ignores a glow colour that is not a colour", () => {
+  it("repairs a glow colour that is not a colour", () => {
     const prefs = normalizeCelestialPrefs({
       moonTints: { DONE: "#123456" },
       moonGlowTints: { DONE: "nope" },
     });
 
-    expect(moonGlowTintForStatus(prefs, "DONE")).toBe("#123456");
+    expect(moonGlowTintForStatus(prefs, "DONE")).toBe(
+      DEFAULT_CELESTIAL_PREFS.moonGlowTints.DONE
+    );
   });
 
   it("survives a stored blob whose glow tints are not even an object", () => {
     const prefs = normalizeCelestialPrefs({ moonGlowTints: 42 });
 
     expect(moonGlowTintForStatus(prefs, "DONE")).toBe(
-      DEFAULT_CELESTIAL_PREFS.moonTints.DONE
+      DEFAULT_CELESTIAL_PREFS.moonGlowTints.DONE
     );
   });
 });

@@ -32,6 +32,10 @@ describe("task log", () => {
     expect(log[1].to).toBe("DONE");
   });
 
+  // Slow on purpose, and given room to be: appendLogEvent reads, parses and
+  // re-serialises the whole log on every call, so filling a 2000-entry cap is
+  // a couple of million JSON operations. Under a loaded suite that ran past
+  // the default timeout and failed a test that was only ever being patient.
   test("caps the log by dropping the oldest entries", () => {
     for (let i = 0; i < LOG_CAP + 25; i++) {
       appendLogEvent(evt({ t: i }));
@@ -39,7 +43,7 @@ describe("task log", () => {
     const log = readLog();
     expect(log).toHaveLength(LOG_CAP);
     expect(log[0].t).toBe(25);
-  });
+  }, 20_000);
 
   test("recovers from corrupt storage instead of throwing", () => {
     localStorage.setItem("flowstate:v1:tasklog", "{not json");

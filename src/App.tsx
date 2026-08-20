@@ -745,6 +745,15 @@ function AppShell() {
     setView("board");
   }, []);
 
+  /**
+   * Travelling between neighbours without leaving the sky. Clicking a distant
+   * system in the galaxy should take you there, not out to the board -- you
+   * were looking at space, and you still are.
+   */
+  const handleTravelToCluster = useCallback((clusterId: string) => {
+    setActiveClusterId(clusterId);
+  }, []);
+
   const handleViewChange = (nextView: ViewMode) => {
     setView(nextView);
   };
@@ -1077,7 +1086,7 @@ function AppShell() {
                       activeClusterId={activeClusterId}
                       totalCounts={totalCountsByCluster}
                       tasksByCluster={tasksByCluster}
-                      onEnter={handleEnterCluster}
+                      onEnter={handleTravelToCluster}
                     />
                   }
                   etherLabel={

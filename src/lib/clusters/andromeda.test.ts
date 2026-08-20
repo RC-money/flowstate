@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ANDROMEDA_ARMS,
   andromedaPoints,
+  neighbourPose,
   projectToDisc,
   ringSlot,
   spiralPoint,
@@ -154,6 +155,53 @@ describe("ringSlot", () => {
 
     expect(Number.isFinite(angle)).toBe(true);
     expect(radius).toBeGreaterThan(0);
+  });
+});
+
+describe("neighbourPose", () => {
+  it("gives the same cluster the same pose every time", () => {
+    expect(neighbourPose("c_abc")).toEqual(neighbourPose("c_abc"));
+  });
+
+  it("sets clusters at different depths, so the field reads as space", () => {
+    const scales = new Set(
+      Array.from({ length: 20 }, (_, i) => neighbourPose(`cluster_${i}`).scale.toFixed(3))
+    );
+
+    expect(scales.size).toBeGreaterThan(12);
+  });
+
+  it("keeps even the nearest and furthest within reach of each other", () => {
+    for (let i = 0; i < 40; i += 1) {
+      const { scale } = neighbourPose(`cluster_${i}`);
+
+      expect(scale).toBeGreaterThanOrEqual(0.5);
+      expect(scale).toBeLessThanOrEqual(1.4);
+    }
+  });
+
+  it("turns each system its own way rather than lining them all up", () => {
+    const tilts = new Set(
+      Array.from({ length: 20 }, (_, i) => neighbourPose(`cluster_${i}`).tilt.toFixed(3))
+    );
+
+    expect(tilts.size).toBeGreaterThan(12);
+  });
+
+  it("shows some systems edge-on and others face-on", () => {
+    const flattens = Array.from({ length: 40 }, (_, i) => neighbourPose(`cluster_${i}`).flatten);
+
+    expect(Math.min(...flattens)).toBeLessThan(0.45);
+    expect(Math.max(...flattens)).toBeGreaterThan(0.8);
+  });
+
+  it("never flattens a system to nothing", () => {
+    for (let i = 0; i < 60; i += 1) {
+      const { flatten } = neighbourPose(`cluster_${i}`);
+
+      expect(flatten).toBeGreaterThanOrEqual(0.2);
+      expect(flatten).toBeLessThanOrEqual(1);
+    }
   });
 });
 

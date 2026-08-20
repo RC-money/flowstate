@@ -32,20 +32,30 @@ export interface Skin {
 }
 
 /**
- * Seven bodies, seven colours -- one per moon sprite, spaced around the wheel
- * so no two columns can be mistaken for each other at a glance.
+ * The bodies on offer, spaced around the wheel so no two columns can be
+ * mistaken for each other at a glance.
  */
 export const SKINS: readonly Skin[] = [
   { id: "moon5", label: "Indigo", accent: "#6f97e8" },
   { id: "moon2", label: "Moss", accent: "#7fd08a" },
   { id: "moon6", label: "Amber", accent: "#e6ad4b" },
-  { id: "moon3", label: "Copper", accent: "#ff9d3c" },
-  { id: "moon1", label: "Rust", accent: "#e8654a" },
+  { id: "moon1", label: "Rust", accent: "#e5573f" },
   { id: "moon0", label: "Rose", accent: "#f4699b" },
   { id: "moon4", label: "Violet", accent: "#b98ede" },
 ] as const;
 
-const SKIN_BY_ID = new Map<string, Skin>(SKINS.map((skin) => [skin.id, skin]));
+/**
+ * Sprites no longer offered, but still resolvable. Copper sat close enough to
+ * Rust that the two read as one colour; dropping it from the list without
+ * keeping it here would silently retint any column already flying it.
+ */
+const RETIRED_SKINS: readonly Skin[] = [
+  { id: "moon3", label: "Copper", accent: "#ff9d3c" },
+] as const;
+
+const SKIN_BY_ID = new Map<string, Skin>(
+  [...SKINS, ...RETIRED_SKINS].map((skin) => [skin.id, skin])
+);
 
 /** Never returns undefined -- an unknown id falls back to the first skin. */
 export const skinById = (id: string): Skin => SKIN_BY_ID.get(id) ?? SKINS[0];
@@ -118,8 +128,13 @@ export const DEFAULT_CELESTIAL_PREFS: CelestialPrefs = {
     "IN PROGRESS": "#f7e28b",
     DONE: "#f7e28b",
   },
-  // Empty on purpose: until a glow is set it follows the body it came from.
-  moonGlowTints: {},
+  // A warmer gold than the body, so a moon reads as a lit thing rather than a
+  // flat disc before anyone touches a swatch.
+  moonGlowTints: {
+    "TO-DO": "#ffce5c",
+    "IN PROGRESS": "#ffce5c",
+    DONE: "#ffce5c",
+  },
   starColor: "#ffce5c",
   sun: "sol",
   moonGlow: true,
@@ -157,15 +172,16 @@ export const normalizeCelestialPrefs = (raw: unknown): CelestialPrefs => {
         : DEFAULT_CELESTIAL_PREFS.moonTints[key];
   }
 
-  // Only real colours are kept; a missing entry means "follow the body", which
-  // is a meaningful state rather than a gap to fill with a default.
+  // The standard columns have a real default; anything else -- a column the
+  // user added -- has none, and falls back to the body it came from.
   const glowRaw = isRecord(raw.moonGlowTints) ? raw.moonGlowTints : {};
   const moonGlowTints: Partial<Record<StatusKey, string>> = {};
   for (const key of STATUS_KEYS) {
     const candidate = glowRaw[key];
-    if (typeof candidate === "string" && HEX_COLOR.test(candidate)) {
-      moonGlowTints[key] = candidate;
-    }
+    moonGlowTints[key] =
+      typeof candidate === "string" && HEX_COLOR.test(candidate)
+        ? candidate
+        : DEFAULT_CELESTIAL_PREFS.moonGlowTints[key];
   }
 
   const colorRaw = raw.starColor;
@@ -229,9 +245,9 @@ export const randomizeCelestialPrefs = (
   return {
     statusSkins,
     moonTints,
-    // A rolled theme leaves the glow following its body; setting it apart is a
-    // deliberate choice, not something a dice roll should make for you.
-    moonGlowTints: {},
+    // A rolled theme keeps the default halo; setting it apart is a deliberate
+    // choice, not something a dice roll should make for you.
+    moonGlowTints: { ...DEFAULT_CELESTIAL_PREFS.moonGlowTints },
     starColor: pick(SKINS, random).accent,
     sun: pick(SUNS, random).id,
     moonGlow: true,

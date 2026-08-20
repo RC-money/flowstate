@@ -41,7 +41,7 @@ const DISC_EXTENT = 1.35;
 const DEEP_FIELD_EXTENT = 3;
 
 /** Arms drawn, and how far each sweeps. Many, tight, and unevenly lit. */
-const DRAWN_ARMS = 16;
+const DRAWN_ARMS = 22;
 const ARM_WINDINGS = 2.4;
 
 const prefersReducedMotion = (): boolean =>
@@ -76,18 +76,21 @@ const TILT_DEGREES = (DISC_TILT * 180) / Math.PI;
  * between frames. Pink where the arms are young, blue-white nearer the core --
  * the two colours the real thing is made of.
  */
-const DUST = Array.from({ length: 520 }, (_, i) => {
+const DUST = Array.from({ length: 620 }, (_, i) => {
   const seed = `dust-${i}`;
   const angle = unit(hash32(seed, 0x1111)) * Math.PI * 2;
   // Square-rooted so the speckle spreads evenly rather than crowding the core.
   const radius = 0.2 + Math.sqrt(unit(hash32(seed, 0x2222))) * 1.0;
-  const young = radius > 0.62 && unit(hash32(seed, 0x5555)) > 0.62;
+  // Pink is rare and scattered. Making it common at large radius drew a solid
+  // red rim, which is the one thing the real photograph does not have -- its
+  // outer disc is blue, with pink knots dotted through it.
+  const young = radius > 0.55 && unit(hash32(seed, 0x5555)) > 0.9;
   return {
     angle,
     radius,
-    size: 0.0035 + unit(hash32(seed, 0x3333)) * (young ? 0.009 : 0.005),
-    opacity: 0.14 + unit(hash32(seed, 0x4444)) * 0.5,
-    color: young ? "#ff9ecb" : radius > 0.5 ? "#bcd0ff" : "#f6e9d2",
+    size: 0.003 + unit(hash32(seed, 0x3333)) * (young ? 0.008 : 0.005),
+    opacity: (young ? 0.35 : 0.12) + unit(hash32(seed, 0x4444)) * 0.45,
+    color: young ? "#ff9ecb" : radius > 0.55 ? "#a8c4ff" : "#f3e3c6",
   };
 });
 
@@ -96,12 +99,42 @@ const DUST = Array.from({ length: 520 }, (_, i) => {
  * near-side lane sits off centre, which is what gives Andromeda its depth
  * rather than reading as a flat pinwheel.
  */
-const DUST_LANES = [
-  { rx: 1.04, cx: 0.03, cy: -0.05, width: 0.055, opacity: 0.5 },
-  { rx: 0.86, cx: -0.02, cy: -0.07, width: 0.045, opacity: 0.42 },
-  { rx: 0.68, cx: 0.04, cy: -0.05, width: 0.036, opacity: 0.34 },
-  { rx: 1.19, cx: 0.0, cy: -0.03, width: 0.04, opacity: 0.3 },
+interface DustLane {
+  rx: number;
+  cx: number;
+  cy: number;
+  width: number;
+  opacity: number;
+  /** Where the band starts and stops, in radians. */
+  from: number;
+  to: number;
+}
+
+const DUST_LANES: DustLane[] = [
+  { rx: 1.14, cx: 0.0, cy: -0.02, width: 0.034, opacity: 0.4, from: 0.35, to: 3.4 },
+  { rx: 1.02, cx: 0.03, cy: -0.05, width: 0.05, opacity: 0.6, from: -0.4, to: 3.2 },
+  { rx: 0.9, cx: -0.01, cy: -0.06, width: 0.045, opacity: 0.55, from: 2.7, to: 6.2 },
+  { rx: 0.76, cx: 0.03, cy: -0.06, width: 0.038, opacity: 0.46, from: 0.1, to: 3.0 },
+  { rx: 0.6, cx: 0.04, cy: -0.05, width: 0.03, opacity: 0.36, from: 3.0, to: 5.9 },
 ];
+
+/**
+ * A dust band as an open arc rather than a closed ellipse. A ring reads as an
+ * outline drawn around the galaxy; a band that starts and stops reads as dust
+ * passing in front of the bulge, which is what it is.
+ */
+const laneArc = ({ rx, cx, cy, from, to }: DustLane): string => {
+  const ry = rx * DISC_FLATTEN;
+  const steps = 40;
+  let path = "";
+  for (let i = 0; i <= steps; i += 1) {
+    const angle = from + ((to - from) * i) / steps;
+    const x = cx + Math.cos(angle) * rx;
+    const y = cy + Math.sin(angle) * ry;
+    path += `${i === 0 ? "M" : "L"}${x.toFixed(4)},${y.toFixed(4)}`;
+  }
+  return path;
+};
 
 /** The field the galaxy hangs in. Unit square, scaled to whatever extent. */
 const FIELD = Array.from({ length: 260 }, (_, i) => {
@@ -263,29 +296,45 @@ export default function AndromedaView({
           }}
         >
           <defs>
+            {/* Layered on purpose: a white-hot nucleus, a warm bulge, a beige
+                halo, then the cool disc. Warm at the middle, cool at the rim
+                is most of what makes a galaxy read as photographed. */}
+            <radialGradient id="andromeda-nucleus">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+              <stop offset="55%" stopColor="#fff6e2" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#ffe9c0" stopOpacity="0" />
+            </radialGradient>
             <radialGradient id="andromeda-bulge">
-              <stop offset="0%" stopColor="#fffdf6" stopOpacity="1" />
-              <stop offset="14%" stopColor="#fff2d8" stopOpacity="0.92" />
-              <stop offset="38%" stopColor="#f0d7ac" stopOpacity="0.55" />
-              <stop offset="70%" stopColor="#d8bb91" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#c9a882" stopOpacity="0" />
+              <stop offset="0%" stopColor="#fffaef" stopOpacity="0.98" />
+              <stop offset="22%" stopColor="#ffeed2" stopOpacity="0.8" />
+              <stop offset="55%" stopColor="#eccfa2" stopOpacity="0.34" />
+              <stop offset="100%" stopColor="#d0ad82" stopOpacity="0" />
             </radialGradient>
             <radialGradient id="andromeda-disc">
-              <stop offset="0%" stopColor="#e8ecff" stopOpacity="0.42" />
-              <stop offset="45%" stopColor="#b8c4f0" stopOpacity="0.22" />
-              <stop offset="78%" stopColor="#8f9fd8" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#6b7bb8" stopOpacity="0" />
+              <stop offset="0%" stopColor="#f6e6c8" stopOpacity="0.26" />
+              <stop offset="34%" stopColor="#c6cfe6" stopOpacity="0.22" />
+              <stop offset="68%" stopColor="#93a6cd" stopOpacity="0.17" />
+              <stop offset="90%" stopColor="#7186b4" stopOpacity="0.08" />
+              <stop offset="100%" stopColor="#5d719c" stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="andromeda-companion">
+              <stop offset="0%" stopColor="#fffaf0" stopOpacity="0.95" />
+              <stop offset="40%" stopColor="#e8dcc4" stopOpacity="0.45" />
+              <stop offset="100%" stopColor="#c9b89a" stopOpacity="0" />
             </radialGradient>
             <filter id="andromeda-soft" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="0.022" />
+              <feGaussianBlur stdDeviation="0.02" />
             </filter>
             <filter id="andromeda-lane" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="0.014" />
+              <feGaussianBlur stdDeviation="0.026" />
+            </filter>
+            <filter id="andromeda-companion-soft" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="0.012" />
             </filter>
           </defs>
 
-          {/* The field this galaxy hangs in. Fixed, so it never boils. */}
-          <g>
+          {/* Subtle, so the galaxy dominates rather than competes. */}
+          <g opacity={0.7}>
             {FIELD.map((star, i) => (
               <circle
                 key={`f${i}`}
@@ -298,48 +347,26 @@ export default function AndromedaView({
             ))}
           </g>
 
-          {/* Everything below shares one tilt, so the disc, its lanes and its
-              bulge are the same ellipse seen at the same angle. */}
           <g transform={`rotate(${TILT_DEGREES})`}>
-            <ellipse rx={1.3} ry={1.3 * DISC_FLATTEN} fill="url(#andromeda-disc)" />
+            <ellipse rx={1.5} ry={1.5 * DISC_FLATTEN} fill="url(#andromeda-disc)" />
           </g>
 
-          {/* The luminous disc, built from many faint arms rather than a few
-              drawn ones. Blurred, they read as light instead of line work. */}
+          {/* The star-filled haze of the disc, built from many faint arms.
+              Blurred, they read as light rather than line work. */}
           <g filter="url(#andromeda-soft)">
             {Array.from({ length: DRAWN_ARMS }, (_, arm) => (
               <path
                 key={`arm-${arm}`}
                 d={armPath(arm, spin)}
                 fill="none"
-                stroke={arm % 5 === 0 ? "#dfe7ff" : "#aebbe8"}
-                strokeWidth={0.012 + (arm % 3) * 0.005}
+                stroke={arm % 5 === 0 ? "#e2e8ff" : "#9fb0dd"}
+                strokeWidth={0.01 + (arm % 3) * 0.004}
                 strokeLinecap="round"
-                opacity={0.1 + (arm % 5) * 0.035}
+                opacity={0.08 + (arm % 5) * 0.03}
               />
             ))}
           </g>
 
-          {/* Dust: the dark bands that make Andromeda read as Andromeda. Not
-              concentric -- the near-side lane sits off centre, which is what
-              gives the disc its depth. */}
-          <g transform={`rotate(${TILT_DEGREES})`} filter="url(#andromeda-lane)">
-            {DUST_LANES.map((lane, i) => (
-              <ellipse
-                key={`lane-${i}`}
-                rx={lane.rx}
-                ry={lane.rx * DISC_FLATTEN}
-                cx={lane.cx}
-                cy={lane.cy}
-                fill="none"
-                stroke="#0c0906"
-                strokeWidth={lane.width}
-                opacity={lane.opacity}
-              />
-            ))}
-          </g>
-
-          {/* Star-forming knots, blue and pink, out where the arms are young. */}
           <g filter="url(#andromeda-soft)">
             {DUST.map((speck, i) => {
               const flat = {
@@ -360,8 +387,46 @@ export default function AndromedaView({
             })}
           </g>
 
+          {/* Arcs, not rings. A closed ellipse reads as an outline drawn round
+              the galaxy; a band that starts and stops reads as dust passing in
+              front of the bulge, which is what it is. */}
+          <g transform={`rotate(${TILT_DEGREES})`} filter="url(#andromeda-lane)">
+            {DUST_LANES.map((lane, i) => (
+              <path
+                key={`lane-${i}`}
+                d={laneArc(lane)}
+                fill="none"
+                stroke="#241a12"
+                strokeWidth={lane.width}
+                strokeLinecap="round"
+                opacity={lane.opacity}
+              />
+            ))}
+          </g>
+
           <g transform={`rotate(${TILT_DEGREES})`}>
-            <ellipse rx={0.62} ry={0.62 * DISC_FLATTEN * 1.5} fill="url(#andromeda-bulge)" />
+            <ellipse rx={0.54} ry={0.54 * DISC_FLATTEN * 1.7} fill="url(#andromeda-bulge)" />
+            <ellipse rx={0.15} ry={0.15 * DISC_FLATTEN * 2.4} fill="url(#andromeda-nucleus)" />
+          </g>
+
+          {/* M32 and M110. Nothing else says Andromeda as quickly. */}
+          <g filter="url(#andromeda-companion-soft)">
+            <ellipse
+              cx={0.72}
+              cy={-0.66}
+              rx={0.075}
+              ry={0.06}
+              fill="url(#andromeda-companion)"
+            />
+            <ellipse
+              cx={-0.86}
+              cy={0.52}
+              rx={0.15}
+              ry={0.085}
+              transform="rotate(-18 -0.86 0.52)"
+              fill="url(#andromeda-companion)"
+              opacity={0.72}
+            />
           </g>
 
           {shown.map(renderPoint)}
@@ -380,6 +445,11 @@ export default function AndromedaView({
         <header className="border-b border-[rgba(165,175,255,0.1)] px-5 py-4">
           <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-300">
             Andromeda
+          </p>
+          {/* Which one you are standing in. The ring on its point says so too,
+              but only if you can find the point. */}
+          <p className="mt-1.5 truncate text-sm text-[#c9d0ff]">
+            {live.find((point) => point.id === activeClusterId)?.name ?? "Nowhere yet"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
             {live.length} {live.length === 1 ? "cluster" : "clusters"} on the arms

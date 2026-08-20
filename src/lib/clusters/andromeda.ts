@@ -84,6 +84,29 @@ export const ringSlot = (
   };
 };
 
+export interface NeighbourPose {
+  /** Depth. Under 1 is further away, over 1 is nearer. */
+  scale: number;
+  /** Which way the system lies, in radians. */
+  tilt: number;
+  /** 0.2 (edge-on, a line) to 1 (face-on, a circle). */
+  flatten: number;
+}
+
+/**
+ * How a neighbouring cluster sits in space.
+ *
+ * Nothing out there shares an orientation or a distance, and a ring of
+ * identical face-on systems at identical size reads as a menu rather than a
+ * sky. All three come off the id, so a cluster keeps its own bearing forever
+ * and none of it is stored.
+ */
+export const neighbourPose = (clusterId: string): NeighbourPose => ({
+  scale: 0.55 + unit(hash32(clusterId, 0x3c6ef372)) * 0.8,
+  tilt: unit(hash32(clusterId, 0xa54ff53a)) * Math.PI * 2,
+  flatten: 0.22 + unit(hash32(clusterId, 0x510e527f)) * 0.78,
+});
+
 export interface AndromedaPoint {
   id: string;
   name: string;
@@ -127,6 +150,14 @@ export const andromedaPoints = (
     .sort((a, b) => (b.etheredAt ?? 0) - (a.etheredAt ?? 0));
   const rank = new Map(ordered.map((cluster, index) => [cluster.id, index]));
 
+  // Arms are dealt round-robin rather than hashed. Hashing alone put two of
+  // three clusters on the same arm at nearly the same radius, and two points
+  // on top of each other is one point as far as anyone can tell. The radius
+  // still comes off the id, so a cluster keeps its own distance out.
+  const liveOrder = new Map(
+    clusters.filter(isLive).map((cluster, index) => [cluster.id, index])
+  );
+
   return clusters.map((cluster) => {
     const touched = lastTouched[cluster.id] ?? cluster.createdAt;
     const open = openCounts[cluster.id] ?? 0;
@@ -151,7 +182,11 @@ export const andromedaPoints = (
       };
     }
 
-    const { x, y } = spiralPoint(armSlot(cluster.id));
+    const slot = armSlot(cluster.id);
+    const { x, y } = spiralPoint({
+      arm: (liveOrder.get(cluster.id) ?? 0) % ANDROMEDA_ARMS,
+      radius: slot.radius,
+    });
     // The same curve a neglected task follows, one level up.
     const decay = decayLevel(touched, now);
     return {
