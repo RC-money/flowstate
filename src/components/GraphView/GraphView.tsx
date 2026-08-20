@@ -31,6 +31,13 @@ import type { Constellation, Tether } from "../../types/celestial";
 import { analyzeConstellations } from "../../engine/constellations/analyzer";
 import { deriveStars } from "../../lib/earnedStars";
 import { heliosPosition, heliosRadius } from "../../lib/orbitalMechanics";
+import {
+  flowRotationAt,
+  IDENTITY_ROTATION,
+  isIdentityRotation,
+  rotatePoint,
+  type ViewRotation,
+} from "../../lib/viewRotation";
 
 type BaseStarfieldProps = React.ComponentProps<typeof Starfield>;
 type EnhancedStarfieldProps = BaseStarfieldProps & {
@@ -110,7 +117,8 @@ const TAG_CLUSTER_RADIUS = 260;
 const MAX_TAG_CLUSTERS = 5;
 const AUTO_LOCK_DELAY = 2500;
 /** How long the galaxy must sit untouched before the camera starts to wander. */
-const IDLE_DRIFT_DELAY_MS = 30_000;
+/** How long Flow spends easing from one configuration to the next. */
+const FLOW_LEG_MS = 14_000;
 const GRAPH_BACKGROUND_TINTS: Record<
   keyof typeof COLUMN_TARGETS,
   { r: number; g: number; b: number; a: number }
@@ -338,9 +346,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [scrollZoomEnabled, setScrollZoomEnabled] = useState<boolean>(
-    () => graphData.nodes.length < 100
-  );
+  const [scrollZoomEnabled, setScrollZoomEnabled] = useState<boolean>(false);
   const [tetherDraft, setTetherDraft] = useState<{
     sourceId: string;
     sourceScreen: { x: number; y: number };
@@ -471,7 +477,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     return () => window.removeEventListener(STARFIELD_TASK_EVENT, handler as EventListener);
   }, [emitStarfieldEvent]);
   const rafRef = useRef<number | undefined>(undefined);
-  const scrollZoomOverrideRef = useRef(false);
   const graphViewportRef = useRef<HTMLDivElement | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
     if (typeof window === "undefined" || typeof window.matchMedia === "undefined") {
@@ -558,24 +563,6 @@ const GraphView: React.FC<GraphViewProps> = ({
   // Ambient drift: after a long idle the camera wanders slowly, like a
   // planetarium left running. Off by default -- motion you did not ask for is
   // the opposite of what this app is for.
-  useEffect(() => {
-    if (!graphPrefs.idleDrift) return undefined;
-    if (typeof window === "undefined") return undefined;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-
-    let phase = 0;
-    const timer = window.setInterval(() => {
-      if (Date.now() - lastInteractionRef.current < IDLE_DRIFT_DELAY_MS) return;
-      const fg = fgRef.current;
-      if (!fg || typeof fg.centerAt !== "function") return;
-      phase += 0.012;
-      // A slow ellipse around wherever the board sits; small enough to read as
-      // drift rather than as the app moving on its own.
-      fg.centerAt(Math.cos(phase) * 90, Math.sin(phase) * 55, 900);
-    }, 900);
-
-    return () => window.clearInterval(timer);
-  }, [graphPrefs.idleDrift]);
 
   // HELIOS pins every planet onto a ring around a sun instead of letting the
   // force simulation decide. New work hugs the sun, finished work rides the
@@ -586,13 +573,17 @@ const GraphView: React.FC<GraphViewProps> = ({
   });
   const heliosActive = heliosMode;
   const [heliosFrozen, setHeliosFrozen] = useState(false);
-  // Spin the whole system like turning a table, so you can bring any planet
-  // round to the front without dragging it out of its orbit.
-  const [heliosSpin, setHeliosSpin] = useState(0);
-  const heliosSpinRef = useRef(0);
+  // Three axes of view control: spin turns the table, tilt lifts you above or
+  // below the plane, yaw swings it around. Flow drifts between configurations
+  // on its own. Applies with or without HELIOS.
+  const [rotation, setRotation] = useState<ViewRotation>(IDENTITY_ROTATION);
+  const rotationRef = useRef<ViewRotation>(IDENTITY_ROTATION);
   useEffect(() => {
-    heliosSpinRef.current = (heliosSpin * Math.PI) / 180;
-  }, [heliosSpin]);
+    rotationRef.current = rotation;
+  }, [rotation]);
+  const setAxis = useCallback((axis: keyof ViewRotation, value: number) => {
+    setRotation((prev) => ({ ...prev, [axis]: value }));
+  }, []);
   // Freezing holds the system exactly where it is; resuming picks up from the
   // same angle rather than snapping forward to wall-clock time.
   const heliosClockRef = useRef<{ frozenAt: number | null; offset: number }>({
@@ -611,6 +602,70 @@ const GraphView: React.FC<GraphViewProps> = ({
       return !prev;
     });
   }, []);
+
+  // Flow eases the view between the configurations in FLOW_PRESETS, so the
+  // galaxy keeps showing you itself from somewhere new.
+  const [flowOn, setFlowOn] = useState(false);
+  useEffect(() => {
+    if (!flowOn) return undefined;
+    if (typeof window === "undefined") return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    const start = performance.now();
+    let raf = 0;
+    const step = () => {
+      setRotation(flowRotationAt(performance.now() - start, FLOW_LEG_MS));
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [flowOn]);
+
+  // Outside HELIOS the simulation owns positions, so a rotation is applied by
+  // pinning each body through the same lens. Snapshot the settled layout once,
+  // then rotate from it; releasing hands the planets back.
+  const flatBaseRef = useRef<Map<string, { x: number; y: number }> | null>(null);
+  const rotationActive = !isIdentityRotation(rotation);
+  useEffect(() => {
+    if (heliosActive || !rotationActive) {
+      flatBaseRef.current = null;
+      if (!heliosActive) {
+        graphData.nodes.forEach((node) => {
+          const n = node as GraphNode & { fx?: number; fy?: number };
+          delete n.fx;
+          delete n.fy;
+        });
+      }
+      return undefined;
+    }
+    if (!flatBaseRef.current) {
+      const base = new Map<string, { x: number; y: number }>();
+      graphData.nodes.forEach((node) => {
+        const n = node as GraphNode & { x?: number; y?: number };
+        base.set(String(n.id), { x: n.x ?? 0, y: n.y ?? 0 });
+      });
+      flatBaseRef.current = base;
+    }
+    let raf = 0;
+    const step = () => {
+      const base = flatBaseRef.current;
+      if (base) {
+        graphData.nodes.forEach((node) => {
+          const n = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+          const b = base.get(String(n.id));
+          if (!b) return;
+          const p = rotatePoint({ x: b.x, y: b.y, z: 0 }, rotationRef.current);
+          n.x = p.x;
+          n.y = p.y;
+          n.fx = p.x;
+          n.fy = p.y;
+        });
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [heliosActive, rotationActive, graphData.nodes]);
 
   /** Centres the sun and pulls back to hold the outermost lane. */
   const frameHelios = useCallback((transition = 700) => {
@@ -641,24 +696,35 @@ const GraphView: React.FC<GraphViewProps> = ({
     // delay lets the graph instance and the pinned positions exist first.
     const frameTimer = window.setTimeout(() => frameHelios(700), 450);
     let raf = 0;
+    // Count how many planets share each ring so they can space themselves.
+    const ringSlots = new Map<string, number>();
+    const ringTotals = new Map<string, number>();
+    graphData.nodes.forEach((node) => {
+      const key = String((node as GraphNode).status ?? "TO-DO");
+      ringTotals.set(key, (ringTotals.get(key) ?? 0) + 1);
+    });
+
     const step = () => {
       const clock = heliosClockRef.current;
       const now = (clock.frozenAt ?? performance.now()) - clock.offset;
+      ringSlots.clear();
       graphData.nodes.forEach((node) => {
         const n = node as GraphNode & { x?: number; y?: number; fx?: number; fy?: number };
+        const ring = String(n.status ?? "TO-DO");
+        const index = ringSlots.get(ring) ?? 0;
+        ringSlots.set(ring, index + 1);
         const { x, y } = heliosPosition(
           String(n.id),
-          String(n.status ?? "TO-DO"),
+          ring,
           now,
-          n.subtaskMoons?.length ?? 0
+          n.subtaskMoons?.length ?? 0,
+          { index, total: ringTotals.get(ring) ?? 1 }
         );
-        const spin = heliosSpinRef.current;
-        const sx = x * Math.cos(spin) - y * Math.sin(spin);
-        const sy = x * Math.sin(spin) + y * Math.cos(spin);
-        n.x = sx;
-        n.y = sy;
-        n.fx = sx;
-        n.fy = sy;
+        const p = rotatePoint({ x, y, z: 0 }, rotationRef.current);
+        n.x = p.x;
+        n.y = p.y;
+        n.fx = p.x;
+        n.fy = p.y;
       });
       raf = requestAnimationFrame(step);
     };
@@ -681,7 +747,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       if (!heliosActive) return;
       const t = performance.now();
       const breath = 1 + Math.sin(t / 1400) * 0.04;
-      const r = 34 * breath;
+      const r = 96 * breath;
 
       ctx.save();
       // Orbit lanes first, so the sun sits on top of them.
@@ -1361,17 +1427,8 @@ const GraphView: React.FC<GraphViewProps> = ({
   }, [graphData.nodes, isNodeVisible, updateNodePositions]);
 
   const toggleScrollZoom = useCallback(() => {
-    scrollZoomOverrideRef.current = true;
     setScrollZoomEnabled((prev) => !prev);
   }, []);
-
-  useEffect(() => {
-    if (scrollZoomOverrideRef.current) {
-      return;
-    }
-    const shouldEnableScrollZoom = graphData.nodes.length < 100;
-    setScrollZoomEnabled((prev) => (prev === shouldEnableScrollZoom ? prev : shouldEnableScrollZoom));
-  }, [graphData.nodes.length]);
 
   const tooltipCoords = useMemo(() => {
     const baseX = tooltipPosition?.x ?? cursor.x;
@@ -1638,32 +1695,57 @@ const GraphView: React.FC<GraphViewProps> = ({
             </div>
             <button
               type="button"
+              aria-pressed={scrollZoomEnabled}
               onClick={toggleScrollZoom}
-              className="mt-3 w-full rounded-lg border border-white/15 px-3 py-2 text-[11px] font-medium text-slate-100 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+              title="Let the scroll wheel zoom the galaxy instead of scrolling the page"
+              className={[
+                "mt-3 w-full rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition",
+                scrollZoomEnabled
+                  ? "border-cyan-300/70 bg-cyan-400/15 text-cyan-100"
+                  : "border-white/15 text-slate-300 hover:bg-white/10",
+              ].join(" ")}
             >
-              {scrollZoomEnabled ? "Use scroll for page" : "Use scroll to zoom"}
+              Zoom
             </button>
-            {heliosActive ? (
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  <span>Spin</span>
-                  <span>{heliosSpin}&deg;</span>
+            <div className="mt-3 space-y-2">
+              {(
+                [
+                  { axis: "spin" as const, label: "Spin", hint: "Turn it like a wheel facing you", min: -180, max: 180 },
+                  { axis: "tilt" as const, label: "Tilt", hint: "Tip the plane up and over, flat to edge-on", min: -180, max: 180 },
+                  { axis: "yaw" as const, label: "Yaw", hint: "Swing it around the upright", min: -180, max: 180 },
+                ]
+              ).map(({ axis, label, hint, min, max }) => (
+                <div key={axis}>
+                  <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    <span>{label}</span>
+                    <span>{Math.round(rotation[axis])}&deg;</span>
+                  </div>
+                  <label className="sr-only" htmlFor={`view-${axis}`}>
+                    {hint}
+                  </label>
+                  <input
+                    id={`view-${axis}`}
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={1}
+                    title={hint}
+                    value={rotation[axis]}
+                    disabled={flowOn}
+                    onChange={(event) => setAxis(axis, Number(event.target.value))}
+                    className="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-amber-300 disabled:opacity-40"
+                  />
                 </div>
-                <label className="sr-only" htmlFor="helios-spin">
-                  Spin the system
-                </label>
-                <input
-                  id="helios-spin"
-                  type="range"
-                  min={-180}
-                  max={180}
-                  step={1}
-                  value={heliosSpin}
-                  onChange={(event) => setHeliosSpin(Number(event.target.value))}
-                  className="mt-2 h-1 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-amber-300"
-                />
-              </div>
-            ) : null}
+              ))}
+              <button
+                type="button"
+                onClick={() => setRotation(IDENTITY_ROTATION)}
+                disabled={flowOn || !rotationActive}
+                className="w-full rounded-lg border border-white/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 transition hover:bg-white/10 hover:text-white disabled:opacity-30"
+              >
+                Straighten
+              </button>
+            </div>
             <div className="mt-3 flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -1704,19 +1786,17 @@ const GraphView: React.FC<GraphViewProps> = ({
               ) : null}
               <button
                 type="button"
-                aria-pressed={Boolean(graphPrefs.idleDrift)}
-                onClick={() =>
-                  setGraphPrefs((prev) => ({ ...prev, idleDrift: !prev.idleDrift }))
-                }
-                title="After 30s untouched, the camera wanders slowly"
+                aria-pressed={flowOn}
+                onClick={() => setFlowOn((prev) => !prev)}
+                title="Drift between different views of the galaxy"
                 className={[
-                  "flex-1 rounded-lg border px-3 py-2 text-[11px] font-medium transition",
-                  graphPrefs.idleDrift
-                    ? "border-white/60 bg-white/10 text-white"
+                  "flex-1 rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition",
+                  flowOn
+                    ? "border-violet-300/70 bg-violet-400/15 text-violet-100"
                     : "border-white/15 text-slate-300 hover:bg-white/10",
                 ].join(" ")}
               >
-                Idle drift {graphPrefs.idleDrift ? "on" : "off"}
+                Flow
               </button>
             </div>
           </div>

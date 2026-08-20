@@ -24,9 +24,9 @@ const MAX_INCLINATION = 0.78;
 
 /** HELIOS: new work hugs the sun, finished work is flung to the outer dark. */
 const HELIOS_RADII: Record<string, number> = {
-  "TO-DO": 150,
-  "IN PROGRESS": 280,
-  DONE: 430,
+  "TO-DO": 240,
+  "IN PROGRESS": 470,
+  DONE: 720,
 };
 const HELIOS_BASE_PERIOD_MS = 48_000;
 const HELIOS_PERIOD_PER_SUBTASK_MS = 9_000;
@@ -187,11 +187,19 @@ export const heliosPosition = (
   id: string,
   status: string,
   now: number,
-  subtaskCount: number
+  subtaskCount: number,
+  /** Where this planet sits among the others sharing its ring, if known. */
+  slot?: { index: number; total: number }
 ): { x: number; y: number } => {
   const radius = heliosRadius(status);
   const elapsed = Number.isFinite(now) ? now : 0;
   const rotation = (elapsed / heliosOrbitPeriodMs(subtaskCount)) * Math.PI * 2;
-  const angle = heliosPhase(id) + rotation;
+  // Sharing a ring means sharing it evenly. A hash alone clumps planets into
+  // the same arc; the jitter keeps the spacing from looking mechanical.
+  const base =
+    slot && slot.total > 0
+      ? (slot.index / slot.total) * Math.PI * 2 + heliosPhase(id) * 0.12
+      : heliosPhase(id);
+  const angle = base + rotation;
   return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
 };
