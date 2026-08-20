@@ -524,7 +524,9 @@ function AppShell() {
     };
   }, []);
 
-  const { playingSrc, toggle: toggleOrbit } = useAmbientAudio();
+  const { playingSrc, shuffle, toggle: toggleOrbit, toggleShuffle } = useAmbientAudio(
+    MUSIC_TRACKS.map((track) => track.src)
+  );
 
   const commands: Command[] = useMemo(
     () => [
@@ -723,7 +725,13 @@ function AppShell() {
 
       <Observatory open={observatoryOpen} onClose={() => setObservatoryOpen(false)}>
         <IntentSurface />
-        <MusicPanel tracks={MUSIC_TRACKS} playingSrc={playingSrc} onToggle={toggleOrbit} />
+        <MusicPanel
+          tracks={MUSIC_TRACKS}
+          playingSrc={playingSrc}
+          shuffle={shuffle}
+          onToggle={toggleOrbit}
+          onToggleShuffle={toggleShuffle}
+        />
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
             Your data
