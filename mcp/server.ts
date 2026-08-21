@@ -144,7 +144,7 @@ const executeCommand = (command: Command) => serialized(async () => {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
 });
 
-const server = new McpServer({ name: "flowstate", version: "0.1.0" });
+const server = new McpServer({ name: "flowstate", version: "1.0.0" });
 
 /**
  * A column name, not one of three fixed statuses. Boards make their own

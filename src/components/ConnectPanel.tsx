@@ -205,6 +205,15 @@ export default function ConnectPanel({ open, onClose }: ConnectPanelProps) {
             Paste it into whatever you already use. It explains the board, and
             it will walk you through connecting properly if your assistant can.
           </p>
+          {/* Said before setup rather than discovered during it. Without node
+              the server does not start, and the failure an assistant reports
+              is a command-not-found that explains nothing. */}
+          <p className="mt-2 text-[11px] text-amber-200/70">
+            The MCP route needs Node installed. Check with{" "}
+            <span className="font-mono text-amber-100/80">node --version</span>{" "}
+            in a terminal — no Node, no server, and the file route above is the
+            one that works.
+          </p>
           <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[#c9d0ff]">
             {HANDOVER_PROMPT}
           </pre>

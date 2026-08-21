@@ -74,12 +74,19 @@ Every change it makes is undoable in one call.
 ### What it isn't
 
 - Not for teams. Ever.
-- macOS only today. iPhone and iPad are in progress.
+- macOS only today, Apple Silicon and Intel both. iPhone and iPad are in progress.
 - Not subscription software. You buy it once.
 
 ### Requirements
 
-macOS on Apple Silicon. Roughly 11 MB installed.
+macOS 10.15 or later, Apple Silicon or Intel — the download is universal.
+Roughly 24 MB.
+
+**For the AI features:** connecting an assistant over MCP needs
+[Node](https://nodejs.org) on your machine. Most people already running AI
+coding tools have it; check with `node --version`. Without it the app is
+entirely usable, you just drive the board yourself — or hand your assistant
+the board file directly, which needs nothing installed.
 
 iPhone and iPad versions are being built, with the board syncing through your
 own iCloud — no account with me, no server in the middle.
