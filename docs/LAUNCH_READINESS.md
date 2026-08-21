@@ -99,6 +99,22 @@ board with cluster names.
 AI coding tools, but it belongs on the listing rather than being a surprise at
 setup time.
 
+## Universal build (was a gap, fixed 2026-08-21)
+
+Intel Macs could not launch it at all. `rustup target add x86_64-apple-darwin`
+once, then `--target universal-apple-darwin`; `lipo` reports `x86_64 arm64` and
+the dmg is ~24MB rather than ~14MB.
+
+`scripts/release-mac.sh` builds universal now and refuses to continue if the
+binary is not fat or if `mcp/server.mjs` is missing from the bundle. Both are
+silent failures otherwise -- one strands every Intel buyer, the other strands
+the feature the listing leads with.
+
+Note on signatures: a plain `npx tauri build` produces an ad-hoc, linker-signed
+app with `Sealed Resources=none`, so `codesign --verify --deep --strict` fails
+on it. That is expected for a dev build, not a fault. The real signature comes
+from the release script with `APPLE_SIGNING_IDENTITY` set.
+
 ## Known gaps, deliberate
 
 - **No dive animation.** Entering a cluster is a cut, not a fall.
@@ -108,8 +124,8 @@ setup time.
   `parse`, so custom columns work there.
 - **Andromeda is one image at one size** (559KB). It is not art-directed for
   very wide or very tall panes.
-- **The board is still arm64-only** and the Gumroad listing is unwritten --
-  see the distribution notes, unchanged by this work.
+- **The Gumroad listing is unwritten**, and nowhere a buyer can see says the
+  MCP server needs Node on their machine.
 
 ## Housekeeping done
 

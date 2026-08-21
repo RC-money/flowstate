@@ -30,14 +30,34 @@ echo "==> Building and signing"
 # Tauri signs during bundling when APPLE_SIGNING_IDENTITY is set. The dmg
 # bundler drives Finder over AppleScript and fails headless, so build the
 # .app here and package the dmg below.
-npx tauri build --bundles app
+#
+# Universal, not the host's architecture: an arm64-only build simply will not
+# launch on an Intel Mac, and that is not a thing to discover from a refund
+# request. Needs `rustup target add x86_64-apple-darwin` once.
+npx tauri build --bundles app --target universal-apple-darwin
 
-APP="src-tauri/target/release/bundle/macos/Flowstate.app"
-DMG_DIR="src-tauri/target/release/bundle/dmg"
+APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Flowstate.app"
+DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
 DMG="$DMG_DIR/Flowstate.dmg"
 
 echo "==> Verifying signature"
 codesign --verify --deep --strict --verbose=2 "$APP"
+
+# Both architectures, or Intel buyers get an app that cannot open.
+echo "==> Verifying architectures"
+ARCHS="$(lipo -archs "$APP/Contents/MacOS/app")"
+echo "    $ARCHS"
+case "$ARCHS" in
+  *x86_64*arm64*|*arm64*x86_64*) ;;
+  *) echo "Not a universal binary: $ARCHS" >&2; exit 1 ;;
+esac
+
+# The MCP server ships as a bundled resource and is covered by the signature.
+echo "==> Verifying the MCP server shipped"
+test -f "$APP/Contents/Resources/mcp/server.mjs" || {
+  echo "mcp/server.mjs missing from the bundle -- check resources in tauri.conf.json" >&2
+  exit 1
+}
 
 echo "==> Packaging dmg"
 mkdir -p "$DMG_DIR"
